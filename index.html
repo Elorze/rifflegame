@@ -636,11 +636,18 @@
     if (phase === 'exit' || phase === 'enter') return 0;
     let inside = 0;
     const ox = containerSlide;
+    // Count mass that has entered the vessel mouth (not only below the neck).
+    // Still biased toward "mostly stuffed" via 0.85 threshold + hold time.
     for (let i = 1; i <= OUTER_N; i++) {
       const p = points[i];
-      if (p.y >= container.neckY && pointInVessel(p.x - ox, p.y)) inside++;
+      if (p.y >= container.mouthY - 2 && pointInVessel(p.x - ox, Math.max(p.y, container.mouthY + 1))) {
+        inside++;
+      } else if (p.y >= container.neckY && Math.abs(p.x - (container.cx + ox)) < container.mouthW * 0.55) {
+        // points jammed in the neck lane still count toward fill progress
+        inside += 0.65;
+      }
     }
-    return inside / OUTER_N;
+    return Math.min(1, inside / OUTER_N);
   }
 
   // ========== Drag ==========
