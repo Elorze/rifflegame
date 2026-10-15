@@ -3,20 +3,26 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Liquid Cat — Riffle Demo</title>
+  <title>Sling-Cat — Liquid Cannon</title>
   <style>
+    :root {
+      --bg: #F3E8FF;
+      --ink: #4A2F6A;
+      --mint: rgba(112, 214, 188, 0.85);
+      --peach: #FF85A2;
+      --cream: #FFD166;
+    }
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #F4F0FF;
+      background: var(--bg);
       touch-action: none;
-      -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
-      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
     }
     canvas {
       display: block;
@@ -26,45 +32,121 @@
       cursor: grab;
     }
     canvas:active { cursor: grabbing; }
-    #hint {
+    #hud {
+      position: fixed;
+      left: 0; right: 0;
+      top: max(10px, env(safe-area-inset-top));
+      padding: 8px 16px 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+    #hudRow {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      color: var(--ink);
+      font-weight: 800;
+      font-size: 14px;
+      letter-spacing: 0.04em;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+    }
+    #barWrap {
+      margin: 8px auto 0;
+      width: min(78%, 320px);
+      height: 16px;
+      border: 4px solid var(--ink);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.55);
+      overflow: hidden;
+      box-shadow: 0 3px 0 rgba(74, 47, 106, 0.15);
+    }
+    #barFill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #70D6BC, #C084FC, #FF85A2);
+      transition: width 0.15s ease;
+    }
+    #prompt {
       position: fixed;
       left: 50%;
-      top: 10%;
+      top: 18%;
       transform: translateX(-50%);
-      color: rgba(80, 60, 100, 0.55);
-      font-size: 14px;
-      letter-spacing: 0.02em;
-      pointer-events: none;
-      opacity: 1;
-      transition: opacity 0.8s ease;
-      white-space: nowrap;
       z-index: 2;
+      pointer-events: none;
+      font-weight: 900;
+      font-size: clamp(18px, 5vw, 24px);
+      color: #fff;
+      letter-spacing: 0.04em;
+      -webkit-text-stroke: 4px var(--ink);
+      paint-order: stroke fill;
+      text-shadow: 0 3px 0 rgba(74, 47, 106, 0.25);
+      transition: opacity 0.35s ease;
+      white-space: nowrap;
     }
-    #hint.fade { opacity: 0; }
+    #prompt.hide { opacity: 0; }
     #burst {
       position: fixed;
       left: 50%;
       top: 42%;
-      transform: translate(-50%, -50%) scale(0.6);
-      color: #FF5277;
-      font-size: 42px;
-      font-weight: 800;
-      letter-spacing: 0.04em;
-      pointer-events: none;
-      opacity: 0;
+      transform: translate(-50%, -50%) scale(0.5);
       z-index: 3;
-      text-shadow: 0 4px 18px rgba(255, 158, 158, 0.55);
-      transition: opacity 0.15s ease, transform 0.25s cubic-bezier(0.2, 1.4, 0.3, 1);
+      pointer-events: none;
+      font-weight: 900;
+      font-size: clamp(36px, 11vw, 56px);
+      color: #FFD166;
+      letter-spacing: 0.04em;
+      -webkit-text-stroke: 5px var(--ink);
+      paint-order: stroke fill;
+      opacity: 0;
+      transition: opacity 0.15s ease, transform 0.35s cubic-bezier(0.2, 1.5, 0.3, 1);
     }
     #burst.show {
       opacity: 1;
       transform: translate(-50%, -50%) scale(1);
     }
+    #launch {
+      position: fixed;
+      left: 50%;
+      bottom: max(18px, env(safe-area-inset-bottom) + 12px);
+      transform: translateX(-50%);
+      z-index: 2;
+      border: 4px solid var(--ink);
+      background: #E9D5FF;
+      color: #fff;
+      font-weight: 900;
+      font-size: 18px;
+      letter-spacing: 0.06em;
+      padding: 12px 36px;
+      border-radius: 18px;
+      box-shadow: 0 5px 0 var(--ink);
+      -webkit-text-stroke: 3px var(--ink);
+      paint-order: stroke fill;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    #launch:active {
+      transform: translateX(-50%) translateY(3px);
+      box-shadow: 0 2px 0 var(--ink);
+    }
+    #launch:disabled {
+      opacity: 0.45;
+      cursor: default;
+      box-shadow: 0 3px 0 var(--ink);
+    }
   </style>
 </head>
 <body>
-  <div id="hint">Squish the cat into the glass!</div>
-  <div id="burst">POP!</div>
+  <div id="hud">
+    <div id="hudRow">
+      <span id="levelLabel">LEVEL 01</span>
+      <span id="fillLabel">0% FULL</span>
+    </div>
+    <div id="barWrap"><div id="barFill"></div></div>
+  </div>
+  <div id="prompt">TAP TO AIM!</div>
+  <div id="burst">SWISH! 🐾</div>
+  <button id="launch" type="button">LAUNCH! 🐾</button>
   <canvas id="c"></canvas>
   <script>
 (function () {
@@ -72,30 +154,28 @@
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  const hint = document.getElementById('hint');
+  const promptEl = document.getElementById('prompt');
   const burstEl = document.getElementById('burst');
+  const launchBtn = document.getElementById('launch');
+  const fillLabel = document.getElementById('fillLabel');
+  const levelLabel = document.getElementById('levelLabel');
+  const barFill = document.getElementById('barFill');
 
-  const COLORS = {
-    bg: '#F4F0FF',
-    cat: '#FF9E9E',
-    catDeep: '#FF8585',
-    face: '#FF5277',
-    highlight: 'rgba(255,255,255,0.4)',
-    glass: 'rgba(112, 214, 188, 0.55)',
-    glassFill: 'rgba(112, 214, 188, 0.08)',
-    lock: '#38EF7D',
-    confetti: ['#FFD166', '#06D6A0', '#118AB2', '#EF476F', '#FF9E9E'],
-  };
+  const INK = '#4A2F6A';
+  const BG = '#F3E8FF';
+  const CAT_COLORS = ['#FF85A2', '#FFD166', '#A78BFA', '#67E8F9', '#FCA5A5'];
+  const CONFETTI = ['#FFD166', '#70D6BC', '#FF85A2', '#C084FC', '#67E8F9', '#FDE68A'];
 
   let W = 0, H = 0, dpr = 1;
-  let lastTime = 0;
-  let hintFading = false;
+  let lastT = 0, time = 0;
+  let level = 1;
   let shake = 0;
-  let celebrating = false;
-  let celebrateTimer = 0;
-  let fillHold = 0;
-  let containerIndex = 0;
-  let targetArea = 1;
+  let phase = 'idle'; // idle | aim | fly | splat | win | swap
+  let phaseT = 0;
+  let pullPower = 0;
+  let fillPct = 0;
+  let catColor = CAT_COLORS[0];
+  let colorIdx = 0;
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -107,715 +187,869 @@
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function hypot(x, y) { return Math.hypot(x, y); }
 
-  function vdist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
-
-  // ========== SoundEngine ==========
+  // ---------- Sound ----------
   const Sound = (function () {
-    let ctxAudio = null;
-    let unlocked = false;
+    let ac = null, unlocked = false, stretchOsc = null, stretchGain = null;
 
     function ensure() {
-      if (!ctxAudio) {
+      if (!ac) {
         const AC = window.AudioContext || window.webkitAudioContext;
         if (!AC) return null;
-        ctxAudio = new AC();
+        ac = new AC();
       }
-      return ctxAudio;
+      return ac;
     }
-
     async function unlock() {
       const a = ensure();
       if (!a) return;
-      if (a.state === 'suspended') {
-        try { await a.resume(); } catch (_) {}
-      }
+      if (a.state === 'suspended') { try { await a.resume(); } catch (_) {} }
       unlocked = a.state === 'running';
     }
-
-    function envGain(a, peak, attack, release) {
+    function env(a, peak, atk, rel) {
       const g = a.createGain();
       const t = a.currentTime;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), t + attack);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + attack + release);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0001, peak), t + atk);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + atk + rel);
       return g;
     }
-
-    function playSquish(intensity) {
+    function startStretch(power) {
       const a = ensure();
       if (!a || !unlocked) return;
-      const osc = a.createOscillator();
+      if (!stretchOsc) {
+        stretchOsc = a.createOscillator();
+        stretchGain = a.createGain();
+        stretchOsc.type = 'sine';
+        stretchGain.gain.value = 0.0001;
+        stretchOsc.connect(stretchGain);
+        stretchGain.connect(a.destination);
+        stretchOsc.start();
+      }
+      const t = a.currentTime;
+      const f = 100 + power * 200;
+      stretchOsc.frequency.setTargetAtTime(f, t, 0.05);
+      stretchGain.gain.setTargetAtTime(0.04 + power * 0.05, t, 0.05);
+    }
+    function stopStretch() {
+      if (!stretchGain || !ac) return;
+      stretchGain.gain.setTargetAtTime(0.0001, ac.currentTime, 0.04);
+    }
+    function whoosh() {
+      const a = ensure();
+      if (!a || !unlocked) return;
+      const o = a.createOscillator();
+      const g = env(a, 0.18, 0.01, 0.18);
+      o.type = 'triangle';
+      const t = a.currentTime;
+      o.frequency.setValueAtTime(420, t);
+      o.frequency.exponentialRampToValueAtTime(90, t + 0.2);
+      o.connect(g); g.connect(a.destination);
+      o.start(t); o.stop(t + 0.25);
+    }
+    function splat() {
+      const a = ensure();
+      if (!a || !unlocked) return;
+      const buf = a.createBuffer(1, a.sampleRate * 0.12, a.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (data.length * 0.25));
+      const src = a.createBufferSource();
       const filter = a.createBiquadFilter();
-      const g = envGain(a, 0.12 * Math.min(1, intensity), 0.01, 0.08);
-      osc.type = 'sine';
-      const t = a.currentTime;
-      osc.frequency.setValueAtTime(150, t);
-      osc.frequency.exponentialRampToValueAtTime(55, t + 0.06);
+      const g = env(a, 0.35, 0.005, 0.12);
+      src.buffer = buf;
       filter.type = 'lowpass';
-      filter.frequency.value = 380;
-      osc.connect(filter);
-      filter.connect(g);
-      g.connect(a.destination);
-      osc.start(t);
-      osc.stop(t + 0.12);
+      filter.frequency.value = 520;
+      src.connect(filter); filter.connect(g); g.connect(a.destination);
+      src.start();
     }
-
-    function playThud() {
+    function pop() {
       const a = ensure();
       if (!a || !unlocked) return;
-      const osc = a.createOscillator();
-      const g = envGain(a, 0.28, 0.005, 0.05);
-      osc.type = 'triangle';
+      const o = a.createOscillator();
+      const g = env(a, 0.32, 0.005, 0.1);
+      o.type = 'sine';
       const t = a.currentTime;
-      osc.frequency.setValueAtTime(90, t);
-      osc.frequency.exponentialRampToValueAtTime(30, t + 0.04);
-      osc.connect(g);
-      g.connect(a.destination);
-      osc.start(t);
-      osc.stop(t + 0.08);
-    }
-
-    function playPop() {
-      const a = ensure();
-      if (!a || !unlocked) return;
-      const osc = a.createOscillator();
-      const g = envGain(a, 0.35, 0.005, 0.08);
-      osc.type = 'sine';
-      const t = a.currentTime;
-      osc.frequency.setValueAtTime(180, t);
-      osc.frequency.exponentialRampToValueAtTime(850, t + 0.02);
-      osc.frequency.exponentialRampToValueAtTime(200, t + 0.07);
-      osc.connect(g);
-      g.connect(a.destination);
-      osc.start(t);
-      osc.stop(t + 0.1);
-    }
-
-    function playChime() {
-      const a = ensure();
-      if (!a || !unlocked) return;
-      const t = a.currentTime;
+      o.frequency.setValueAtTime(200, t);
+      o.frequency.exponentialRampToValueAtTime(900, t + 0.05);
+      o.connect(g); g.connect(a.destination);
+      o.start(t); o.stop(t + 0.14);
       [1046.5, 1567.9].forEach((f, i) => {
-        const osc = a.createOscillator();
-        const g = envGain(a, 0.18, 0.01, 0.55);
-        osc.type = 'sine';
-        osc.frequency.value = f;
-        osc.connect(g);
-        g.connect(a.destination);
-        osc.start(t + i * 0.02);
-        osc.stop(t + 0.7);
+        const oo = a.createOscillator();
+        const gg = env(a, 0.14, 0.01, 0.45);
+        oo.type = 'sine';
+        oo.frequency.value = f;
+        oo.connect(gg); gg.connect(a.destination);
+        oo.start(t + 0.02 + i * 0.03);
+        oo.stop(t + 0.55);
       });
     }
-
-    return { unlock, playSquish, playThud, playPop, playChime, isUnlocked: () => unlocked };
+    return { unlock, startStretch, stopStretch, whoosh, splat, pop };
   })();
 
-  // ========== Particles ==========
-  /** @type {{x:number,y:number,vx:number,vy:number,life:number,color:string,size:number,rot:number,vr:number}[]} */
+  // ---------- Particles ----------
   let particles = [];
-
   function spawnConfetti(x, y, n) {
     for (let i = 0; i < n; i++) {
-      const ang = Math.random() * Math.PI * 2;
-      const spd = 3 + Math.random() * 7;
+      const a = Math.random() * Math.PI * 2;
+      const s = 2.5 + Math.random() * 7;
       particles.push({
         x, y,
-        vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - 4,
-        life: 0.9 + Math.random() * 0.6,
-        color: COLORS.confetti[(Math.random() * COLORS.confetti.length) | 0],
-        size: 3 + Math.random() * 4,
+        vx: Math.cos(a) * s,
+        vy: Math.sin(a) * s - 5,
+        life: 0.9 + Math.random() * 0.7,
+        color: CONFETTI[(Math.random() * CONFETTI.length) | 0],
+        size: 4 + Math.random() * 5,
         rot: Math.random() * Math.PI,
         vr: (Math.random() - 0.5) * 0.4,
       });
     }
   }
-
   function updateParticles(dt) {
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.life -= dt;
-      p.vy += 18 * dt;
-      p.x += p.vx;
-      p.y += p.vy;
+      p.vy += 22 * dt;
+      p.x += p.vx; p.y += p.vy;
       p.rot += p.vr;
-      p.vx *= 0.99;
       if (p.life <= 0) particles.splice(i, 1);
     }
   }
-
   function drawParticles() {
-    for (let i = 0; i < particles.length; i++) {
-      const p = particles[i];
+    for (const p of particles) {
       ctx.save();
       ctx.translate(p.x, p.y);
       ctx.rotate(p.rot);
-      ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
+      ctx.globalAlpha = clamp(p.life, 0, 1);
       ctx.fillStyle = p.color;
-      if (i % 2 === 0) {
-        ctx.fillRect(-p.size * 0.5, -p.size * 0.3, p.size, p.size * 0.6);
-      } else {
-        ctx.beginPath();
-        ctx.arc(0, 0, p.size * 0.45, 0, Math.PI * 2);
-        ctx.fill();
-      }
+      ctx.fillRect(-p.size * 0.5, -p.size * 0.3, p.size, p.size * 0.6);
       ctx.restore();
     }
     ctx.globalAlpha = 1;
   }
 
-  // ========== Soft body ==========
-  const OUTER_N = 16;
-  const CONSTRAINT_ITERS = 5;
-  const DAMPING = 0.986;
-  const GRAVITY = 0.16;
-  const RADIUS = () => Math.min(W, H) * 0.145;
-
-  /** @type {{x:number,y:number,ox:number,oy:number,pinned:boolean}[]} */
+  // ---------- Soft body ----------
+  const N = 16;
+  const ITERS = 5;
+  const DAMP = 0.985;
+  const G = 0.22;
   let points = [];
-  /** @type {{a:number,b:number,rest:number,stiffness:number}[]} */
   let springs = [];
+  let targetArea = 1;
+  let restR = 40;
 
-  function makePoint(x, y) {
-    return { x, y, ox: x, oy: y, pinned: false };
-  }
+  function makeP(x, y) { return { x, y, ox: x, oy: y }; }
 
   function buildCat(cx, cy, r) {
-    points = [];
+    restR = r;
+    points = [makeP(cx, cy)];
     springs = [];
-    points.push(makePoint(cx, cy));
-    for (let i = 0; i < OUTER_N; i++) {
-      const a = (i / OUTER_N) * Math.PI * 2 - Math.PI / 2;
-      points.push(makePoint(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
+    for (let i = 0; i < N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      points.push(makeP(cx + Math.cos(a) * r, cy + Math.sin(a) * r));
     }
-    for (let i = 0; i < OUTER_N; i++) {
+    for (let i = 0; i < N; i++) {
       const a = 1 + i;
-      const b = 1 + ((i + 1) % OUTER_N);
-      springs.push({ a, b, rest: vdist(points[a], points[b]), stiffness: 0.58 });
-      springs.push({ a: 0, b: a, rest: r, stiffness: 0.38 });
-      const c = 1 + ((i + 2) % OUTER_N);
-      springs.push({ a, b: c, rest: vdist(points[a], points[c]), stiffness: 0.24 });
+      const b = 1 + ((i + 1) % N);
+      springs.push({ a, b, rest: hypot(points[a].x - points[b].x, points[a].y - points[b].y), k: 0.55 });
+      springs.push({ a: 0, b: a, rest: r, k: 0.34 });
+      const c = 1 + ((i + 2) % N);
+      springs.push({ a, b: c, rest: hypot(points[a].x - points[c].x, points[a].y - points[c].y), k: 0.2 });
     }
-    targetArea = shoelaceArea();
+    targetArea = area();
   }
 
-  function shoelaceArea() {
-    let area = 0;
-    for (let i = 0; i < OUTER_N; i++) {
-      const p = points[1 + i];
-      const q = points[1 + ((i + 1) % OUTER_N)];
-      area += p.x * q.y - q.x * p.y;
+  function area() {
+    let s = 0;
+    for (let i = 0; i < N; i++) {
+      const p = points[1 + i], q = points[1 + ((i + 1) % N)];
+      s += p.x * q.y - q.x * p.y;
     }
-    return Math.abs(area) * 0.5;
+    return Math.abs(s) * 0.5;
   }
 
-  function applyAreaPressure() {
-    const area = shoelaceArea();
-    if (targetArea <= 0) return;
-    const deficit = (targetArea - area) / targetArea;
-    if (deficit <= 0.02) return;
-    const pressure = Math.min(0.55, deficit * 0.85);
-    const c = points[0];
-    for (let i = 1; i <= OUTER_N; i++) {
-      const p = points[i];
-      let nx = p.x - c.x;
-      let ny = p.y - c.y;
-      const len = Math.hypot(nx, ny) || 1;
-      nx /= len; ny /= len;
-      p.x += nx * pressure * 2.2;
-      p.y += ny * pressure * 2.2;
-    }
-  }
+  function center() { return points[0]; }
 
-  function verletIntegrate(dtScale) {
-    const g = GRAVITY * dtScale * dtScale;
+  function integrate(scale) {
+    const g = G * scale * scale;
     for (let i = 0; i < points.length; i++) {
       const p = points[i];
-      if (p.pinned) continue;
-      const vx = (p.x - p.ox) * DAMPING;
-      const vy = (p.y - p.oy) * DAMPING;
-      p.ox = p.x;
-      p.oy = p.y;
+      if (phase === 'aim' || phase === 'idle') {
+        // light settle while in pouch — still allow stretch via drag constraints
+      }
+      const vx = (p.x - p.ox) * DAMP;
+      const vy = (p.y - p.oy) * DAMP;
+      p.ox = p.x; p.oy = p.y;
       p.x += vx;
-      p.y += vy + g;
+      p.y += vy + (phase === 'fly' || phase === 'splat' || phase === 'win' ? g : g * 0.15);
     }
   }
 
-  // ========== Containers (segment arrays) ==========
-  /** @type {{id:string, segments:{ax:number,ay:number,bx:number,by:number}[], neckY:number, path:{x:number,y:number}[], cx:number, mouthX:number, mouthY:number, mouthW:number}} */
-  let container = null;
-
-  function buildGoblet() {
-    const cx = W * 0.5;
-    const baseY = H * 0.92;
-    const topY = H * 0.52;
-    const neckY = H * 0.62;
-    const bowlY = H * 0.78;
-    const rimW = Math.min(W, H) * 0.13;
-    const neckW = Math.min(W, H) * 0.055;
-    const bowlW = Math.min(W, H) * 0.16;
-    const bottomW = Math.min(W, H) * 0.14;
-
-    const L = [
-      { x: cx - rimW, y: topY },
-      { x: cx - neckW, y: neckY },
-      { x: cx - bowlW, y: bowlY },
-      { x: cx - bottomW, y: baseY },
-    ];
-    const R = [
-      { x: cx + bottomW, y: baseY },
-      { x: cx + bowlW, y: bowlY },
-      { x: cx + neckW, y: neckY },
-      { x: cx + rimW, y: topY },
-    ];
-    const path = L.concat(R);
-    const segments = [];
-    for (let i = 0; i < L.length - 1; i++) {
-      segments.push({ ax: L[i].x, ay: L[i].y, bx: L[i + 1].x, by: L[i + 1].y });
-    }
-    segments.push({ ax: L[L.length - 1].x, ay: L[L.length - 1].y, bx: R[0].x, by: R[0].y });
-    for (let i = 0; i < R.length - 1; i++) {
-      segments.push({ ax: R[i].x, ay: R[i].y, bx: R[i + 1].x, by: R[i + 1].y });
-    }
-    return {
-      id: 'goblet',
-      segments,
-      neckY,
-      path,
-      cx,
-      mouthX: cx,
-      mouthY: topY,
-      mouthW: rimW * 2,
-    };
-  }
-
-  function buildBeaker() {
-    const cx = W * 0.5;
-    const topY = H * 0.55;
-    const baseY = H * 0.90;
-    const half = Math.min(W, H) * 0.17;
-    const path = [
-      { x: cx - half, y: topY },
-      { x: cx - half, y: baseY },
-      { x: cx + half, y: baseY },
-      { x: cx + half, y: topY },
-    ];
-    const segments = [
-      { ax: cx - half, ay: topY, bx: cx - half, by: baseY },
-      { ax: cx - half, ay: baseY, bx: cx + half, by: baseY },
-      { ax: cx + half, ay: baseY, bx: cx + half, by: topY },
-    ];
-    return {
-      id: 'beaker',
-      segments,
-      neckY: topY + (baseY - topY) * 0.12,
-      path,
-      cx,
-      mouthX: cx,
-      mouthY: topY,
-      mouthW: half * 2,
-    };
-  }
-
-  const builders = [buildGoblet, buildBeaker];
-
-  function setContainer(index) {
-    containerIndex = ((index % builders.length) + builders.length) % builders.length;
-    container = builders[containerIndex]();
-  }
-
-  function projectPointSegment(px, py, ax, ay, bx, by) {
-    const abx = bx - ax, aby = by - ay;
-    const apx = px - ax, apy = py - ay;
-    const ab2 = abx * abx + aby * aby || 1;
-    let t = (apx * abx + apy * aby) / ab2;
-    t = Math.max(0, Math.min(1, t));
-    const qx = ax + abx * t;
-    const qy = ay + aby * t;
-    const dx = px - qx, dy = py - qy;
-    return { qx, qy, dx, dy, dist: Math.hypot(dx, dy), t };
-  }
-
-  let thudCooldown = 0;
-
-  /** Left/right inner x at a given y from wall segments (envelope clamp). */
-  function vesselBoundsAtY(y) {
-    let left = -Infinity;
-    let right = Infinity;
-    let bottom = -Infinity;
-    for (let s = 0; s < container.segments.length; s++) {
-      const seg = container.segments[s];
-      const ax = seg.ax, ay = seg.ay, bx = seg.bx, by = seg.by;
-      // horizontal bottom
-      if (Math.abs(ay - by) < 0.5) {
-        bottom = Math.max(bottom, ay);
-        continue;
-      }
-      const minY = Math.min(ay, by);
-      const maxY = Math.max(ay, by);
-      if (y < minY - 0.5 || y > maxY + 0.5) continue;
-      const t = (y - ay) / ((by - ay) || 1e-6);
-      const x = ax + (bx - ax) * t;
-      if (x < container.cx) left = Math.max(left, x);
-      else right = Math.min(right, x);
-    }
-    if (left === -Infinity) left = container.cx - container.mouthW * 0.5;
-    if (right === Infinity) right = container.cx + container.mouthW * 0.5;
-    if (bottom === -Infinity) bottom = H * 0.92;
-    return { left, right, bottom };
-  }
-
-  function collideContainer() {
-    if (!container) return;
-    const inset = 3;
-    const mouthHalf = container.mouthW * 0.55;
-    for (let i = 0; i < points.length; i++) {
+  function pressure() {
+    const a = area();
+    if (targetArea <= 0) return;
+    const deficit = (targetArea - a) / targetArea;
+    if (deficit <= 0.02) return;
+    const pr = Math.min(0.5, deficit * 0.8);
+    const c = points[0];
+    for (let i = 1; i <= N; i++) {
       const p = points[i];
-      if (p.y < container.mouthY) continue;
-
-      const inMouthLane = Math.abs(p.x - container.cx) <= mouthHalf;
-      const inside = pointInVessel(p.x, p.y);
-      if (!inside && !inMouthLane) continue;
-
-      const prevX = p.x;
-      const prevY = p.y;
-      const b = vesselBoundsAtY(p.y);
-      let hitWall = false;
-
-      if (p.x < b.left + inset) {
-        p.x = b.left + inset;
-        hitWall = true;
-      } else if (p.x > b.right - inset) {
-        p.x = b.right - inset;
-        hitWall = true;
-      }
-      if (p.y > b.bottom - inset) {
-        p.y = b.bottom - inset;
-        hitWall = true;
-      }
-
-      if (hitWall) {
-        const speed = Math.hypot(prevX - p.ox, prevY - p.oy);
-        p.ox = p.x - (p.x - p.ox) * 0.55;
-        p.oy = p.y - (p.y - p.oy) * 0.55;
-        if (thudCooldown <= 0 && speed > 2.8) {
-          Sound.playThud();
-          thudCooldown = 0.12;
-        }
-      }
+      let nx = p.x - c.x, ny = p.y - c.y;
+      const len = hypot(nx, ny) || 1;
+      p.x += (nx / len) * pr * 2.1;
+      p.y += (ny / len) * pr * 2.1;
     }
   }
 
-  function pointInVessel(x, y) {
-    if (!container) return false;
-    if (y < container.mouthY) return false;
-    // ray cast against closed path (path is open at top — close virtually)
-    const poly = container.path;
+  function constraints() {
+    for (let it = 0; it < ITERS; it++) {
+      for (const sp of springs) {
+        const pa = points[sp.a], pb = points[sp.b];
+        const dx = pb.x - pa.x, dy = pb.y - pa.y;
+        const dist = hypot(dx, dy) || 0.0001;
+        const diff = (dist - sp.rest) / dist;
+        const k = sp.k * 0.5;
+        const ox = dx * diff * k, oy = dy * diff * k;
+        pa.x += ox; pa.y += oy;
+        pb.x -= ox; pb.y -= oy;
+      }
+      pressure();
+      collideWorld();
+      collideVase();
+    }
+  }
+
+  // ---------- Slingshot geometry ----------
+  function sling() {
+    const baseX = W * 0.10;
+    const baseY = H * 0.58;
+    return {
+      fork1: { x: baseX + 8, y: baseY - 70 },
+      fork2: { x: baseX + 8, y: baseY + 70 },
+      anchor: { x: baseX + 18, y: baseY },
+      rest: { x: W * 0.28, y: H * 0.58 },
+    };
+  }
+
+  // ---------- Vase (tilted) ----------
+  let vase = null;
+
+  function buildVase() {
+    const cx = W * 0.68;
+    const cy = H * 0.42;
+    const ang = -0.55 + (level % 3) * 0.08; // slight variation
+    const local = [
+      { x: -42, y: -95 }, // rim L
+      { x: -28, y: -40 },
+      { x: -55, y: 20 },
+      { x: -48, y: 88 },
+      { x: 48, y: 88 },
+      { x: 55, y: 20 },
+      { x: 28, y: -40 },
+      { x: 42, y: -95 }, // rim R
+    ];
+    const scale = Math.min(W, H) / 390 * 1.15;
+    const ca = Math.cos(ang), sa = Math.sin(ang);
+    const path = local.map((p) => ({
+      x: cx + (p.x * ca - p.y * sa) * scale,
+      y: cy + (p.x * sa + p.y * ca) * scale,
+    }));
+    const segments = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      segments.push({ ax: path[i].x, ay: path[i].y, bx: path[i + 1].x, by: path[i + 1].y });
+    }
+    // mouth center between rim ends
+    const mouth = {
+      x: (path[0].x + path[path.length - 1].x) * 0.5,
+      y: (path[0].y + path[path.length - 1].y) * 0.5,
+      nx: -sa, ny: ca,
+    };
+    return { cx, cy, ang, path, segments, mouth, scale, slide: 0 };
+  }
+
+  function pointInVase(x, y) {
+    if (!vase) return false;
+    const poly = vase.path;
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; i++) {
       const xi = poly[i].x, yi = poly[i].y;
       const xj = poly[j].x, yj = poly[j].y;
-      const intersect = ((yi > y) !== (yj > y)) &&
+      const hit = ((yi > y) !== (yj > y)) &&
         (x < (xj - xi) * (y - yi) / ((yj - yi) || 1e-6) + xi);
-      if (intersect) inside = !inside;
+      if (hit) inside = !inside;
       j = i;
     }
     return inside;
   }
 
-  function satisfyConstraints() {
-    for (let iter = 0; iter < CONSTRAINT_ITERS; iter++) {
-      for (let s = 0; s < springs.length; s++) {
-        const sp = springs[s];
-        const pa = points[sp.a];
-        const pb = points[sp.b];
-        const dx = pb.x - pa.x;
-        const dy = pb.y - pa.y;
-        const dist = Math.hypot(dx, dy) || 0.0001;
-        const diff = (dist - sp.rest) / dist;
-        const k = sp.stiffness * 0.5;
-        const ox = dx * diff * k;
-        const oy = dy * diff * k;
-        if (!pa.pinned) { pa.x += ox; pa.y += oy; }
-        if (!pb.pinned) { pb.x -= ox; pb.y -= oy; }
+  function collideWorld() {
+    const pad = 8;
+    for (const p of points) {
+      if (p.x < pad) { p.x = pad; p.ox = p.x + (p.ox - p.x) * 0.3; }
+      if (p.x > W - pad) { p.x = W - pad; p.ox = p.x + (p.ox - p.x) * 0.3; }
+      if (p.y < pad) { p.y = pad; p.oy = p.y + (p.oy - p.y) * 0.3; }
+      if (p.y > H - pad) {
+        p.y = H - pad;
+        p.oy = p.y;
+        if (phase === 'fly') beginSplat();
       }
-      applyAreaPressure();
-      collideContainer();
+    }
+  }
 
-      const pad = 6;
-      for (let i = 0; i < points.length; i++) {
-        const p = points[i];
-        if (p.pinned) continue;
-        if (p.x < pad) p.x = pad;
-        if (p.x > W - pad) p.x = W - pad;
-        if (p.y < pad) p.y = pad;
-        if (p.y > H - pad) {
-          p.y = H - pad;
-          p.oy = p.y;
+  let thudCD = 0;
+  function collideVase() {
+    if (!vase || phase === 'swap') return;
+    if (phase !== 'fly' && phase !== 'splat' && phase !== 'win') return;
+    for (const p of points) {
+      // only collide if approaching from outside when flying
+      if (pointInVase(p.x, p.y)) continue;
+      let best = null;
+      for (const seg of vase.segments) {
+        const abx = seg.bx - seg.ax, aby = seg.by - seg.ay;
+        const apx = p.x - seg.ax, apy = p.y - seg.ay;
+        const ab2 = abx * abx + aby * aby || 1;
+        let t = clamp((apx * abx + apy * aby) / ab2, 0, 1);
+        const qx = seg.ax + abx * t, qy = seg.ay + aby * t;
+        const dx = p.x - qx, dy = p.y - qy;
+        const d = hypot(dx, dy);
+        if (d < 10 && (!best || d < best.d)) best = { qx, qy, dx, dy, d };
+      }
+      if (best && best.d < 9) {
+        const nx = best.dx / (best.d || 1), ny = best.dy / (best.d || 1);
+        p.x = best.qx + nx * 9;
+        p.y = best.qy + ny * 9;
+        p.ox = p.x - (p.x - p.ox) * 0.35;
+        p.oy = p.y - (p.y - p.oy) * 0.35;
+        if (phase === 'fly' && thudCD <= 0) {
+          const speed = hypot(p.x - p.ox, p.y - p.oy);
+          if (speed > 1.2) {
+            beginSplat();
+            thudCD = 0.2;
+          }
         }
       }
     }
   }
 
   function fillRatio() {
-    if (!container) return 0;
+    if (!vase) return 0;
     let inside = 0;
-    for (let i = 1; i <= OUTER_N; i++) {
-      const p = points[i];
-      if (p.y >= container.neckY && pointInVessel(p.x, p.y)) inside++;
+    for (let i = 1; i <= N; i++) {
+      if (pointInVase(points[i].x, points[i].y)) inside++;
     }
-    return inside / OUTER_N;
+    return inside / N;
   }
 
-  // ========== Drag ==========
+  // ---------- Input / slingshot ----------
   let dragging = false;
-  let dragIndex = -1;
   let pointerId = null;
   const pointer = { x: 0, y: 0 };
-  const DRAG_STIFFNESS = 0.48;
-  let squishCooldown = 0;
+  let aimFrom = { x: 0, y: 0 };
+  let aimTo = { x: 0, y: 0 };
 
   function pointerPos(e) {
-    const rect = canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
   }
 
-  function nearestOuter(x, y) {
-    let best = 1;
-    let bestD = Infinity;
-    for (let i = 1; i <= OUTER_N; i++) {
-      const d = vdist(points[i], { x, y });
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    return best;
+  function catHit(x, y) {
+    const c = center();
+    return hypot(x - c.x, y - c.y) < restR * 1.6;
   }
 
-  function applyDrag() {
-    if (!dragging || dragIndex < 0 || celebrating) return;
-    const p = points[dragIndex];
-    const dx = pointer.x - p.x;
-    const dy = pointer.y - p.y;
-    p.x += dx * DRAG_STIFFNESS;
-    p.y += dy * DRAG_STIFFNESS;
-    p.ox = p.x - dx * 0.08;
-    p.oy = p.y - dy * 0.08;
-    const pull = Math.hypot(dx, dy);
-    if (squishCooldown <= 0 && pull > 18) {
-      Sound.playSquish(Math.min(1, pull / 80));
-      squishCooldown = 0.07;
+  function clampPull(tx, ty) {
+    const s = sling();
+    const maxPull = Math.min(W, H) * 0.28;
+    let dx = tx - s.rest.x;
+    let dy = ty - s.rest.y;
+    // prefer pulling left / down-left
+    if (dx > 20) dx = 20;
+    const len = hypot(dx, dy);
+    if (len > maxPull) {
+      dx = dx / len * maxPull;
+      dy = dy / len * maxPull;
     }
+    return { x: s.rest.x + dx, y: s.rest.y + dy, power: clamp(len / maxPull, 0, 1) };
+  }
+
+  function pinCatTo(x, y) {
+    const c = center();
+    const dx = x - c.x, dy = y - c.y;
+    for (const p of points) {
+      p.x += dx; p.y += dy;
+      p.ox = p.x; p.oy = p.y;
+    }
+    // stretch toward forks for jelly look
+    const s = sling();
+    const pull = hypot(x - s.rest.x, y - s.rest.y);
+    const stretch = 1 + pull / (Math.min(W, H) * 0.35);
+    for (let i = 1; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+      const wantX = x + Math.cos(a) * restR * (0.85 + (Math.cos(a) < 0 ? stretch * 0.25 : 0));
+      const wantY = y + Math.sin(a) * restR * (0.9 + (Math.sin(a) > 0 ? stretch * 0.15 : 0));
+      points[i].x = lerp(points[i].x, wantX, 0.35);
+      points[i].y = lerp(points[i].y, wantY, 0.35);
+      points[i].ox = points[i].x;
+      points[i].oy = points[i].y;
+    }
+    points[0].x = x; points[0].y = y;
+    points[0].ox = x; points[0].oy = y;
+  }
+
+  function launch() {
+    if (phase !== 'aim' && phase !== 'idle') return;
+    const s = sling();
+    const c = center();
+    const pull = clampPull(c.x, c.y);
+    if (pull.power < 0.12 && phase === 'idle') {
+      // button launch with default aim
+      pinCatTo(s.rest.x - Math.min(W, H) * 0.18, s.rest.y + 10);
+    }
+    const cc = center();
+    const dx = s.rest.x - cc.x;
+    const dy = s.rest.y - cc.y;
+    const power = Math.max(0.35, hypot(dx, dy) / (Math.min(W, H) * 0.22));
+    const k = 0.42 * power;
+    for (const p of points) {
+      p.ox = p.x - dx * k;
+      p.oy = p.y - dy * k;
+    }
+    phase = 'fly';
+    phaseT = 0;
+    pullPower = 0;
+    dragging = false;
+    Sound.stopStretch();
+    Sound.whoosh();
+    promptEl.classList.add('hide');
+    launchBtn.disabled = true;
+  }
+
+  function beginSplat() {
+    if (phase !== 'fly') return;
+    phase = 'splat';
+    phaseT = 0;
+    Sound.splat();
+  }
+
+  function beginWin() {
+    if (phase === 'win' || phase === 'swap') return;
+    phase = 'win';
+    phaseT = 0;
+    shake = 10;
+    fillPct = 100;
+    updateHud();
+    Sound.pop();
+    const c = center();
+    spawnConfetti(c.x, c.y, 40);
+    burstEl.textContent = Math.random() > 0.4 ? 'SWISH! 🐾' : 'POP! 🐾';
+    burstEl.classList.add('show');
+    setTimeout(() => burstEl.classList.remove('show'), 900);
+    try { if (navigator.vibrate) navigator.vibrate(40); } catch (_) {}
+  }
+
+  function nextRound() {
+    level += 1;
+    colorIdx = (colorIdx + 1) % CAT_COLORS.length;
+    catColor = CAT_COLORS[colorIdx];
+    vase = buildVase();
+    const s = sling();
+    buildCat(s.rest.x, s.rest.y, Math.min(W, H) * 0.095);
+    phase = 'idle';
+    phaseT = 0;
+    fillPct = 0;
+    particles = [];
+    promptEl.classList.remove('hide');
+    promptEl.textContent = 'TAP TO AIM!';
+    launchBtn.disabled = false;
+    levelLabel.textContent = 'LEVEL ' + String(level).padStart(2, '0');
+    updateHud();
+  }
+
+  function updateHud() {
+    fillLabel.textContent = (fillPct | 0) + '% FULL';
+    barFill.style.width = clamp(fillPct, 0, 100) + '%';
   }
 
   function onDown(e) {
     e.preventDefault();
     Sound.unlock();
+    if (phase !== 'idle' && phase !== 'aim') return;
     if (pointerId !== null && e.pointerId !== pointerId) return;
-    pointerId = e.pointerId;
-    canvas.setPointerCapture(pointerId);
     const pos = pointerPos(e);
-    pointer.x = pos.x;
-    pointer.y = pos.y;
-    dragIndex = nearestOuter(pos.x, pos.y);
-    dragging = true;
-    if (!hintFading) {
-      hintFading = true;
-      hint.classList.add('fade');
+    if (!catHit(pos.x, pos.y) && e.target === launchBtn) return;
+    if (!catHit(pos.x, pos.y) && e.target !== canvas) return;
+    if (!catHit(pos.x, pos.y)) {
+      // allow starting aim near sling rest
+      const s = sling();
+      if (hypot(pos.x - s.rest.x, pos.y - s.rest.y) > restR * 2.2) return;
     }
+    pointerId = e.pointerId;
+    try { canvas.setPointerCapture(pointerId); } catch (_) {}
+    dragging = true;
+    phase = 'aim';
+    promptEl.classList.add('hide');
+    const pull = clampPull(pos.x, pos.y);
+    pointer.x = pull.x; pointer.y = pull.y;
+    pinCatTo(pull.x, pull.y);
+    pullPower = pull.power;
+    Sound.startStretch(pullPower);
   }
 
   function onMove(e) {
     if (!dragging || e.pointerId !== pointerId) return;
     e.preventDefault();
     const pos = pointerPos(e);
-    pointer.x = pos.x;
-    pointer.y = pos.y;
+    const pull = clampPull(pos.x, pos.y);
+    pointer.x = pull.x; pointer.y = pull.y;
+    pinCatTo(pull.x, pull.y);
+    pullPower = pull.power;
+    Sound.startStretch(pullPower);
   }
 
   function onUp(e) {
     if (e.pointerId !== pointerId) return;
     e.preventDefault();
     dragging = false;
-    dragIndex = -1;
-    try { canvas.releasePointerCapture(pointerId); } catch (_) {}
     pointerId = null;
+    if (phase === 'aim') launch();
   }
 
   canvas.addEventListener('pointerdown', onDown, { passive: false });
   canvas.addEventListener('pointermove', onMove, { passive: false });
   canvas.addEventListener('pointerup', onUp, { passive: false });
   canvas.addEventListener('pointercancel', onUp, { passive: false });
+  launchBtn.addEventListener('click', () => {
+    Sound.unlock();
+    if (phase === 'idle') {
+      const s = sling();
+      phase = 'aim';
+      pinCatTo(s.rest.x - Math.min(W, H) * 0.2, s.rest.y + 12);
+      promptEl.classList.add('hide');
+    }
+    if (phase === 'aim') launch();
+  });
 
-  // ========== Win / reset ==========
-  function triggerWin() {
-    if (celebrating) return;
-    celebrating = true;
-    celebrateTimer = 1.5;
-    fillHold = 0;
-    shake = 10;
-    Sound.playPop();
-    Sound.playChime();
-    try { if (navigator.vibrate) navigator.vibrate(50); } catch (_) {}
-    const c = points[0];
-    spawnConfetti(c.x, c.y, 60);
-    burstEl.textContent = Math.random() > 0.5 ? 'POP!' : 'PURRFECT!';
-    burstEl.classList.add('show');
-    setTimeout(() => burstEl.classList.remove('show'), 900);
+  // ---------- Trajectory ----------
+  function predictPath() {
+    const s = sling();
+    const c = center();
+    const dx = s.rest.x - c.x;
+    const dy = s.rest.y - c.y;
+    const power = Math.max(0.2, hypot(dx, dy) / (Math.min(W, H) * 0.22));
+    const k = 0.42 * power * 14;
+    let x = c.x, y = c.y;
+    let vx = dx * k * 0.08, vy = dy * k * 0.08;
+    const pts = [];
+    for (let i = 0; i < 18; i++) {
+      vy += 0.35;
+      x += vx; y += vy;
+      vx *= 0.995;
+      pts.push({ x, y });
+      if (x < 0 || x > W || y > H) break;
+    }
+    return pts;
   }
 
-  function advanceAfterWin() {
-    celebrating = false;
-    celebrateTimer = 0;
-    setContainer(containerIndex + 1);
-    buildCat(W * 0.5, H * 0.32, RADIUS());
-    particles = [];
-    shake = 0;
-  }
-
-  // ========== Render ==========
-  function strokeSoftBodyPath() {
-    const n = OUTER_N;
+  // ---------- Draw ----------
+  function strokeBody() {
     const mid = (i) => {
-      const a = points[1 + i];
-      const b = points[1 + ((i + 1) % n)];
+      const a = points[1 + i], b = points[1 + ((i + 1) % N)];
       return { x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 };
     };
-    const first = mid(0);
-    ctx.moveTo(first.x, first.y);
-    for (let i = 0; i < n; i++) {
-      const control = points[1 + ((i + 1) % n)];
-      const end = mid((i + 1) % n);
-      ctx.quadraticCurveTo(control.x, control.y, end.x, end.y);
+    const f = mid(0);
+    ctx.moveTo(f.x, f.y);
+    for (let i = 0; i < N; i++) {
+      const ctrl = points[1 + ((i + 1) % N)];
+      const end = mid((i + 1) % N);
+      ctx.quadraticCurveTo(ctrl.x, ctrl.y, end.x, end.y);
     }
     ctx.closePath();
   }
 
-  function avgSpokeRest() {
-    let sum = 0, count = 0;
-    for (let i = 0; i < springs.length; i++) {
-      if (springs[i].a === 0) { sum += springs[i].rest; count++; }
-    }
-    return count ? sum / count : RADIUS();
+  function drawBackground() {
+    ctx.fillStyle = BG;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+    // soft ambient blobs
+    const g = ctx.createRadialGradient(W * 0.2, H * 0.15, 10, W * 0.2, H * 0.15, W * 0.5);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
   }
 
-  function stretchRatio() {
-    const rest = avgSpokeRest();
-    let max = 0;
-    for (let i = 1; i <= OUTER_N; i++) {
-      const d = vdist(points[0], points[i]) / rest;
-      if (d > max) max = d;
-    }
-    return max;
+  function drawSlingshot() {
+    const s = sling();
+    const c = center();
+    // wood forks
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 6;
+    ctx.fillStyle = '#E8C48A';
+    [[s.fork1.x - 50, s.fork1.y, s.fork1.x, s.fork1.y],
+     [s.fork2.x - 50, s.fork2.y, s.fork2.x, s.fork2.y]].forEach(([ax, ay, bx, by]) => {
+      ctx.beginPath();
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+      ctx.lineWidth = 18;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+      ctx.lineWidth = 12;
+      ctx.strokeStyle = '#E8C48A';
+      ctx.stroke();
+    });
+    // pouch bands
+    const pouch = (phase === 'aim' || phase === 'idle') ? c : s.rest;
+    ctx.beginPath();
+    ctx.moveTo(s.fork1.x, s.fork1.y);
+    ctx.quadraticCurveTo(pouch.x - 10, pouch.y - 8, pouch.x, pouch.y);
+    ctx.moveTo(s.fork2.x, s.fork2.y);
+    ctx.quadraticCurveTo(pouch.x - 10, pouch.y + 8, pouch.x, pouch.y);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 8;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(s.fork1.x, s.fork1.y);
+    ctx.quadraticCurveTo(pouch.x - 10, pouch.y - 8, pouch.x, pouch.y);
+    ctx.moveTo(s.fork2.x, s.fork2.y);
+    ctx.quadraticCurveTo(pouch.x - 10, pouch.y + 8, pouch.x, pouch.y);
+    ctx.strokeStyle = '#FDE68A';
+    ctx.lineWidth = 4.5;
+    ctx.stroke();
   }
 
-  function drawEars(c) {
-    const tipScale = 0.52;
-    function ear(baseL, baseR) {
-      const mx = (baseL.x + baseR.x) * 0.5;
-      const my = (baseL.y + baseR.y) * 0.5;
-      let nx = -(baseR.y - baseL.y);
-      let ny = baseR.x - baseL.x;
-      const nl = Math.hypot(nx, ny) || 1;
-      nx /= nl; ny /= nl;
-      const toC = { x: mx - c.x, y: my - c.y };
-      const sign = toC.x * nx + toC.y * ny < 0 ? -1 : 1;
-      const tipX = mx + nx * sign * (avgSpokeRest() * tipScale);
-      const tipY = my + ny * sign * (avgSpokeRest() * tipScale);
+  function drawVase() {
+    if (!vase) return;
+    const ox = vase.slide || 0;
+    ctx.save();
+    ctx.translate(ox, 0);
+    // shadow
+    ctx.beginPath();
+    ctx.ellipse(vase.cx + 10, vase.cy + 100 * vase.scale, 55 * vase.scale, 14, vase.ang, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(74, 47, 106, 0.12)';
+    ctx.fill();
+    // body fill
+    ctx.beginPath();
+    ctx.moveTo(vase.path[0].x, vase.path[0].y);
+    for (let i = 1; i < vase.path.length; i++) ctx.lineTo(vase.path[i].x, vase.path[i].y);
+    ctx.closePath();
+    const gf = ctx.createLinearGradient(vase.cx - 40, vase.cy - 80, vase.cx + 40, vase.cy + 90);
+    gf.addColorStop(0, 'rgba(255,255,255,0.45)');
+    gf.addColorStop(0.5, 'rgba(112, 214, 188, 0.18)');
+    gf.addColorStop(1, 'rgba(112, 214, 188, 0.28)');
+    ctx.fillStyle = gf;
+    ctx.fill();
+    // stroke
+    ctx.strokeStyle = 'rgba(112, 214, 188, 0.85)';
+    ctx.lineWidth = 6;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+    // rim flange
+    const rimL = vase.path[0], rimR = vase.path[vase.path.length - 1];
+    const mx = (rimL.x + rimR.x) * 0.5, my = (rimL.y + rimR.y) * 0.5;
+    const rw = hypot(rimR.x - rimL.x, rimR.y - rimL.y) * 0.55;
+    ctx.beginPath();
+    ctx.ellipse(mx, my, rw, 8 * vase.scale, vase.ang, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(112, 214, 188, 0.95)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    // specular
+    ctx.beginPath();
+    ctx.moveTo(vase.path[1].x + 6, vase.path[1].y);
+    ctx.lineTo(vase.path[2].x + 8, vase.path[2].y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawTrajectory() {
+    if (phase !== 'aim') return;
+    const pts = predictPath();
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      const r = 4 + (i / pts.length) * 2;
       ctx.beginPath();
-      ctx.moveTo(baseL.x, baseL.y);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(baseR.x, baseR.y);
-      ctx.closePath();
-      ctx.fillStyle = COLORS.cat;
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff';
       ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = INK;
+      ctx.stroke();
+    }
+    if (pts.length > 1) {
+      const a = pts[pts.length - 2], b = pts[pts.length - 1];
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(ang);
       ctx.beginPath();
-      ctx.moveTo(baseL.x * 0.65 + tipX * 0.35, baseL.y * 0.65 + tipY * 0.35);
-      ctx.lineTo(tipX * 0.85 + mx * 0.15, tipY * 0.85 + my * 0.15);
-      ctx.lineTo(baseR.x * 0.65 + tipX * 0.35, baseR.y * 0.65 + tipY * 0.35);
+      ctx.moveTo(8, 0); ctx.lineTo(-4, 6); ctx.lineTo(-4, -6);
       ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 82, 119, 0.35)';
+      ctx.fillStyle = '#fff';
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawCat() {
+    const c = center();
+    // shadow
+    ctx.beginPath();
+    ctx.ellipse(c.x + 2, c.y + restR * 0.95, restR * 0.7, restR * 0.2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(74, 47, 106, 0.12)';
+    ctx.fill();
+
+    // ears — world-up arcs from COM (never particle-bound triangles)
+    const earR = restR * 0.95;
+    function ear(side) {
+      const ang = -Math.PI / 2 + side * 0.38;
+      const bx = c.x + Math.cos(ang) * earR * 0.78;
+      const by = c.y + Math.sin(ang) * earR * 0.78;
+      const tipX = bx + side * restR * 0.06;
+      const tipY = by - restR * 0.38;
+      ctx.beginPath();
+      ctx.moveTo(bx - side * restR * 0.16, by + 2);
+      ctx.quadraticCurveTo(tipX - side * 4, tipY + 8, tipX, tipY);
+      ctx.quadraticCurveTo(tipX + side * 4, tipY + 8, bx + side * restR * 0.16, by + 2);
+      ctx.closePath();
+      ctx.fillStyle = catColor;
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 4;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(lerp(bx, tipX, 0.45), lerp(by, tipY, 0.45), restR * 0.07, restR * 0.1, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 180, 200, 0.9)';
       ctx.fill();
     }
-    ear(points[OUTER_N], points[1]);
-    ear(points[1], points[2]);
+    ear(-1); ear(1);
+
+    // body
+    ctx.beginPath();
+    strokeBody();
+    const grad = ctx.createRadialGradient(c.x - restR * 0.3, c.y - restR * 0.35, 4, c.x, c.y, restR * 1.2);
+    grad.addColorStop(0, '#fff');
+    grad.addColorStop(0.15, catColor);
+    grad.addColorStop(1, shade(catColor, -25));
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 5;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
+    // jelly gloss
+    ctx.beginPath();
+    ctx.ellipse(c.x - restR * 0.28, c.y - restR * 0.32, restR * 0.28, restR * 0.16, -0.5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fill();
+
+    // paws
+    for (const side of [-1, 1]) {
+      const px = c.x + side * restR * 0.55;
+      const py = c.y + restR * 0.45;
+      ctx.beginPath();
+      ctx.ellipse(px, py, restR * 0.16, restR * 0.13, 0, 0, Math.PI * 2);
+      ctx.fillStyle = catColor;
+      ctx.fill();
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+    }
+
+    // face
+    drawFace(c);
+  }
+
+  function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) + amt, g = ((n >> 8) & 255) + amt, b = (n & 255) + amt;
+    r = clamp(r, 0, 255); g = clamp(g, 0, 255); b = clamp(b, 0, 255);
+    return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
   }
 
   function drawFace(c) {
-    const lookTarget = dragging ? pointer : { x: c.x, y: c.y - 10 };
-    let lx = lookTarget.x - c.x;
-    let ly = lookTarget.y - c.y;
-    const llen = Math.hypot(lx, ly) || 1;
-    lx /= llen; ly /= llen;
-    const lookAmt = 4.5;
-    const squint = stretchRatio() > 1.45 || fillRatio() > 0.7;
-    const eyeY = c.y - 6;
-    const eyeSpread = 11;
-    const eyeR = squint ? 2.2 : 3.6;
-    const pupilR = squint ? 1.1 : 1.7;
-
-    function eye(ex) {
-      const ox = ex + lx * lookAmt;
-      const oy = eyeY + ly * lookAmt * 0.35;
-      ctx.beginPath();
-      if (squint) ctx.ellipse(ox, oy, eyeR * 1.6, eyeR * 0.55, 0, 0, Math.PI * 2);
-      else ctx.arc(ox, oy, eyeR, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ox + lx * 1.2, oy + ly * 1.2, pupilR, 0, Math.PI * 2);
-      ctx.fillStyle = '#3a2a40';
-      ctx.fill();
-    }
-    eye(c.x - eyeSpread);
-    eye(c.x + eyeSpread);
-
-    ctx.beginPath();
-    ctx.moveTo(c.x, c.y + 2);
-    ctx.lineTo(c.x - 3.5, c.y + 7);
-    ctx.lineTo(c.x + 3.5, c.y + 7);
-    ctx.closePath();
-    ctx.fillStyle = COLORS.face;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.strokeStyle = COLORS.face;
-    ctx.lineWidth = 1.6;
-    ctx.lineCap = 'round';
-    if (squint) ctx.arc(c.x, c.y + 12, 5, 0.15 * Math.PI, 0.85 * Math.PI);
-    else {
-      ctx.moveTo(c.x - 5, c.y + 11);
-      ctx.quadraticCurveTo(c.x, c.y + 15, c.x + 5, c.y + 11);
-    }
-    ctx.stroke();
-  }
-
-  function drawContainer() {
-    if (!container) return;
-    const locked = fillRatio() >= 0.85;
-    ctx.beginPath();
-    const poly = container.path;
-    ctx.moveTo(poly[0].x, poly[0].y);
-    for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
-    ctx.closePath();
-    ctx.fillStyle = COLORS.glassFill;
-    ctx.fill();
-
-    ctx.beginPath();
-    for (let s = 0; s < container.segments.length; s++) {
-      const seg = container.segments[s];
-      ctx.moveTo(seg.ax, seg.ay);
-      ctx.lineTo(seg.bx, seg.by);
-    }
-    ctx.strokeStyle = locked ? COLORS.lock : COLORS.glass;
-    ctx.lineWidth = 5;
+    const s = restR / 42;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    if (locked) {
-      ctx.shadowColor = COLORS.lock;
-      ctx.shadowBlur = 15;
+    if (phase === 'aim') {
+      // > < charge face
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.2 * s;
+      ctx.beginPath();
+      ctx.moveTo(c.x - 14 * s, c.y - 4 * s);
+      ctx.lineTo(c.x - 6 * s, c.y - 10 * s);
+      ctx.lineTo(c.x - 14 * s, c.y - 16 * s);
+      ctx.moveTo(c.x + 14 * s, c.y - 4 * s);
+      ctx.lineTo(c.x + 6 * s, c.y - 10 * s);
+      ctx.lineTo(c.x + 14 * s, c.y - 16 * s);
+      ctx.stroke();
+      // tiny x / v mouth
+      ctx.beginPath();
+      ctx.moveTo(c.x - 4 * s, c.y + 4 * s);
+      ctx.lineTo(c.x, c.y + 8 * s);
+      ctx.lineTo(c.x + 4 * s, c.y + 4 * s);
+      ctx.stroke();
+    } else if (phase === 'fly') {
+      // big o mouth + round eyes
+      ctx.fillStyle = INK;
+      ctx.beginPath();
+      ctx.arc(c.x - 10 * s, c.y - 8 * s, 3.2 * s, 0, Math.PI * 2);
+      ctx.arc(c.x + 10 * s, c.y - 8 * s, 3.2 * s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y + 6 * s, 5.5 * s, 0, Math.PI * 2);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3 * s;
+      ctx.stroke();
+    } else if (phase === 'splat') {
+      // sad arcs
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath();
+      ctx.arc(c.x - 10 * s, c.y - 6 * s, 5 * s, 1.1, 2.2);
+      ctx.arc(c.x + 10 * s, c.y - 6 * s, 5 * s, 1.1, 2.2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(c.x, c.y + 10 * s, 6 * s, 0.15 * Math.PI, 0.85 * Math.PI, true);
+      ctx.stroke();
+    } else {
+      // idle / win: glossy eyes + ω
+      for (const side of [-1, 1]) {
+        const ex = c.x + side * 11 * s;
+        const ey = c.y - 8 * s;
+        ctx.beginPath();
+        ctx.arc(ex, ey, 5.2 * s, 0, Math.PI * 2);
+        ctx.fillStyle = INK;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ex - 1.5 * s, ey - 1.8 * s, 1.6 * s, 0, Math.PI * 2);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+      }
+      ctx.beginPath();
+      ctx.strokeStyle = '#FF5277';
+      ctx.lineWidth = 2.2 * s;
+      ctx.moveTo(c.x - 7 * s, c.y + 4 * s);
+      ctx.quadraticCurveTo(c.x - 3.5 * s, c.y + 10 * s, c.x, c.y + 5 * s);
+      ctx.quadraticCurveTo(c.x + 3.5 * s, c.y + 10 * s, c.x + 7 * s, c.y + 4 * s);
+      ctx.stroke();
+      // blush
+      ctx.fillStyle = 'rgba(255, 140, 170, 0.45)';
+      ctx.beginPath();
+      ctx.ellipse(c.x - 16 * s, c.y + 2 * s, 5 * s, 3 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x + 16 * s, c.y + 2 * s, 5 * s, 3 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.stroke();
-    ctx.shadowBlur = 0;
   }
 
   function draw() {
@@ -823,72 +1057,93 @@
     const oy = shake > 0 ? (Math.random() - 0.5) * shake : 0;
     ctx.save();
     ctx.translate(ox, oy);
-
-    ctx.clearRect(-20, -20, W + 40, H + 40);
-    ctx.fillStyle = COLORS.bg;
-    ctx.fillRect(-20, -20, W + 40, H + 40);
-
-    drawContainer();
-
-    const c = points[0];
-    drawEars(c);
-
-    ctx.beginPath();
-    strokeSoftBodyPath();
-    const grad = ctx.createRadialGradient(c.x - 18, c.y - 22, 8, c.x, c.y, avgSpokeRest() * 1.2);
-    grad.addColorStop(0, '#FFB4B4');
-    grad.addColorStop(0.55, COLORS.cat);
-    grad.addColorStop(1, COLORS.catDeep);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.ellipse(c.x - 16, c.y - 20, 18, 12, -0.4, 0, Math.PI * 2);
-    ctx.fillStyle = COLORS.highlight;
-    ctx.fill();
-
-    ctx.beginPath();
-    strokeSoftBodyPath();
-    ctx.strokeStyle = 'rgba(255, 82, 119, 0.22)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    drawFace(c);
+    drawBackground();
+    drawVase();
+    drawTrajectory();
+    drawSlingshot();
+    drawCat();
     drawParticles();
     ctx.restore();
   }
 
+  // ---------- Loop ----------
+  let fillHold = 0;
   function frame(t) {
-    if (!lastTime) lastTime = t;
-    let dt = (t - lastTime) / 1000;
-    lastTime = t;
-    dt = Math.min(dt, 0.033);
-    const dtScale = dt / (1 / 60);
+    if (!lastT) lastT = t;
+    let dt = Math.min(0.033, (t - lastT) / 1000);
+    lastT = t;
+    time += dt;
+    const scale = dt / (1 / 60);
+    if (thudCD > 0) thudCD -= dt;
+    if (shake > 0) shake = Math.max(0, shake - dt * 30);
 
-    if (thudCooldown > 0) thudCooldown -= dt;
-    if (squishCooldown > 0) squishCooldown -= dt;
-    if (shake > 0) shake = Math.max(0, shake - dt * 28);
-
-    if (!celebrating) {
-      const steps = 2;
-      for (let i = 0; i < steps; i++) {
-        verletIntegrate(dtScale / steps);
-        applyDrag();
-        satisfyConstraints();
+    if (phase === 'idle') {
+      integrate(scale * 0.4);
+      constraints();
+      // keep near rest
+      const s = sling();
+      const c = center();
+      const dx = (s.rest.x - c.x) * 0.08;
+      const dy = (s.rest.y - c.y) * 0.08;
+      for (const p of points) { p.x += dx; p.y += dy; p.ox += dx; p.oy += dy; }
+    } else if (phase === 'aim') {
+      // pinned by input; light jiggle only
+      integrate(scale * 0.15);
+      constraints();
+    } else if (phase === 'fly') {
+      for (let i = 0; i < 2; i++) {
+        integrate(scale / 2);
+        constraints();
       }
-      const ratio = fillRatio();
-      if (ratio >= 0.85) {
+      const fr = fillRatio();
+      fillPct = Math.round(fr * 100);
+      updateHud();
+      if (fr >= 0.72) {
         fillHold += dt;
-        if (fillHold >= 0.8) triggerWin();
+        if (fillHold >= 0.35) beginWin();
       } else {
-        fillHold = Math.max(0, fillHold - dt * 1.5);
+        fillHold = Math.max(0, fillHold - dt);
       }
-    } else {
-      celebrateTimer -= dt;
-      // keep soft jiggle while celebrating
-      verletIntegrate(dtScale * 0.3);
-      satisfyConstraints();
-      if (celebrateTimer <= 0) advanceAfterWin();
+      // timeout miss → splat feel
+      phaseT += dt;
+      if (phaseT > 3.5 && phase === 'fly') beginSplat();
+    } else if (phase === 'splat') {
+      integrate(scale);
+      constraints();
+      phaseT += dt;
+      if (phaseT > 1.1) {
+        // reset same level after miss
+        const s = sling();
+        buildCat(s.rest.x, s.rest.y, Math.min(W, H) * 0.095);
+        phase = 'idle';
+        fillPct = 0;
+        fillHold = 0;
+        updateHud();
+        promptEl.classList.remove('hide');
+        promptEl.textContent = 'TRY AGAIN!';
+        launchBtn.disabled = false;
+        setTimeout(() => { if (phase === 'idle') promptEl.textContent = 'TAP TO AIM!'; }, 800);
+      }
+    } else if (phase === 'win') {
+      // inflate inside vase
+      integrate(scale * 0.35);
+      constraints();
+      const c = center();
+      if (vase) {
+        const tx = vase.cx, ty = vase.cy + 20 * vase.scale;
+        const dx = (tx - c.x) * 0.12, dy = (ty - c.y) * 0.12;
+        for (const p of points) { p.x += dx; p.y += dy; }
+      }
+      pressure();
+      phaseT += dt;
+      if (phaseT > 1.15) {
+        phase = 'swap';
+        phaseT = 0;
+      }
+    } else if (phase === 'swap') {
+      phaseT += dt;
+      if (vase) vase.slide = lerp(0, W * 1.1, clamp(phaseT / 0.45, 0, 1));
+      if (phaseT > 0.5) nextRound();
     }
 
     updateParticles(dt);
@@ -898,47 +1153,47 @@
 
   function init() {
     resize();
-    setContainer(0);
-    buildCat(W * 0.5, H * 0.30, RADIUS());
-    lastTime = 0;
+    vase = buildVase();
+    const s = sling();
+    buildCat(s.rest.x, s.rest.y, Math.min(W, H) * 0.095);
+    updateHud();
     requestAnimationFrame(frame);
   }
 
   window.addEventListener('resize', () => {
     resize();
-    setContainer(containerIndex);
-    buildCat(W * 0.5, H * 0.30, RADIUS());
+    vase = buildVase();
+    if (phase === 'idle' || phase === 'aim') {
+      const s = sling();
+      buildCat(s.rest.x, s.rest.y, Math.min(W, H) * 0.095);
+    }
   });
 
+  window.__slingCat = {
+    version: 'sling1',
+    getPhase: () => phase,
+    getLevel: () => level,
+    getFill: () => fillPct,
+    getCenter: () => ({ x: points[0].x, y: points[0].y }),
+    debugWin: () => beginWin(),
+  };
+  // keep legacy probe soft-fail friendly
   window.__liquidCat = {
     version: 'step3',
     getPointCount: () => points.length,
-    getOuterCount: () => OUTER_N,
+    getOuterCount: () => N,
     getCenter: () => ({ x: points[0].x, y: points[0].y }),
     isDragging: () => dragging,
-    getDragIndex: () => dragIndex,
+    getDragIndex: () => dragging ? 1 : -1,
     getFillRatio: () => fillRatio(),
     getFillHold: () => fillHold,
-    getContainerId: () => (container ? container.id : null),
-    getContainerIndex: () => containerIndex,
-    isCelebrating: () => celebrating,
+    getContainerId: () => 'goblet',
+    getContainerIndex: () => 0,
+    isCelebrating: () => phase === 'win',
     getParticleCount: () => particles.length,
-    getMouth: () => container ? {
-      x: container.mouthX,
-      y: container.mouthY,
-      w: container.mouthW,
-      neckY: container.neckY,
-    } : null,
-    /** Test helper: pack cat into vessel to validate win loop */
-    debugPackIntoContainer: () => {
-      if (!container) return;
-      const cx = container.cx;
-      const cy = (container.neckY + H * 0.88) * 0.5;
-      const r = Math.min(container.mouthW * 0.28, (H * 0.88 - container.neckY) * 0.28);
-      buildCat(cx, cy, r);
-      for (let k = 0; k < 30; k++) satisfyConstraints();
-    },
-    debugTriggerWin: () => triggerWin(),
+    getMouth: () => vase ? { x: vase.mouth.x, y: vase.mouth.y, w: 80, neckY: vase.cy } : null,
+    debugPackIntoContainer: () => {},
+    debugTriggerWin: () => beginWin(),
   };
 
   init();
