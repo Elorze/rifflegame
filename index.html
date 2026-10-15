@@ -5,18 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <title>Liquid Cat — Riffle Demo</title>
   <style>
+    :root {
+      --bg0: #efe8ff;
+      --bg1: #f7f2ff;
+      --ink: #5a4570;
+      --accent: #ff5277;
+    }
     html, body {
       margin: 0;
       padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background: #F4F0FF;
+      background:
+        radial-gradient(120% 80% at 50% 0%, #fff7ff 0%, transparent 55%),
+        radial-gradient(90% 70% at 20% 90%, rgba(112, 214, 188, 0.22) 0%, transparent 50%),
+        radial-gradient(80% 60% at 90% 20%, rgba(255, 158, 158, 0.2) 0%, transparent 45%),
+        linear-gradient(180deg, var(--bg1) 0%, var(--bg0) 100%);
       touch-action: none;
       -webkit-touch-callout: none;
       -webkit-user-select: none;
       user-select: none;
-      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-family: "Trebuchet MS", "Segoe UI", Candara, sans-serif;
     }
     canvas {
       display: block;
@@ -29,36 +39,49 @@
     #hint {
       position: fixed;
       left: 50%;
-      top: 10%;
+      top: max(8%, env(safe-area-inset-top, 0px) + 28px);
       transform: translateX(-50%);
-      color: rgba(80, 60, 100, 0.55);
-      font-size: 14px;
-      letter-spacing: 0.02em;
+      color: var(--ink);
+      font-size: clamp(13px, 3.6vw, 16px);
+      font-weight: 600;
+      letter-spacing: 0.01em;
       pointer-events: none;
-      opacity: 1;
-      transition: opacity 0.8s ease;
+      opacity: 0.72;
+      transition: opacity 0.75s ease, transform 0.75s ease;
       white-space: nowrap;
       z-index: 2;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.65);
+      animation: hintFloat 2.8s ease-in-out infinite;
     }
-    #hint.fade { opacity: 0; }
+    #hint.fade {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-8px);
+      animation: none;
+    }
+    @keyframes hintFloat {
+      0%, 100% { transform: translateX(-50%) translateY(0); }
+      50% { transform: translateX(-50%) translateY(-4px); }
+    }
     #burst {
       position: fixed;
       left: 50%;
-      top: 42%;
-      transform: translate(-50%, -50%) scale(0.6);
-      color: #FF5277;
-      font-size: 42px;
+      top: 40%;
+      transform: translate(-50%, -50%) scale(0.55) rotate(-4deg);
+      color: var(--accent);
+      font-size: clamp(36px, 10vw, 52px);
       font-weight: 800;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       pointer-events: none;
       opacity: 0;
       z-index: 3;
-      text-shadow: 0 4px 18px rgba(255, 158, 158, 0.55);
-      transition: opacity 0.15s ease, transform 0.25s cubic-bezier(0.2, 1.4, 0.3, 1);
+      text-shadow:
+        0 6px 24px rgba(255, 82, 119, 0.35),
+        0 2px 0 rgba(255,255,255,0.5);
+      transition: opacity 0.18s ease, transform 0.35s cubic-bezier(0.18, 1.45, 0.3, 1);
     }
     #burst.show {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
+      transform: translate(-50%, -50%) scale(1) rotate(0deg);
     }
   </style>
 </head>
@@ -76,15 +99,21 @@
   const burstEl = document.getElementById('burst');
 
   const COLORS = {
-    bg: '#F4F0FF',
+    bgTop: '#F7F2FF',
+    bgBot: '#EFE8FF',
     cat: '#FF9E9E',
-    catDeep: '#FF8585',
+    catMid: '#FF8F98',
+    catDeep: '#FF7A8A',
     face: '#FF5277',
-    highlight: 'rgba(255,255,255,0.4)',
-    glass: 'rgba(112, 214, 188, 0.55)',
-    glassFill: 'rgba(112, 214, 188, 0.08)',
+    cheek: 'rgba(255, 120, 150, 0.35)',
+    highlight: 'rgba(255,255,255,0.52)',
+    glass: 'rgba(88, 196, 172, 0.75)',
+    glassRim: 'rgba(255,255,255,0.55)',
+    glassFillTop: 'rgba(160, 235, 215, 0.14)',
+    glassFillBot: 'rgba(112, 214, 188, 0.10)',
     lock: '#38EF7D',
-    confetti: ['#FFD166', '#06D6A0', '#118AB2', '#EF476F', '#FF9E9E'],
+    ink: '#3A2A40',
+    confetti: ['#FFD166', '#06D6A0', '#7BDFF2', '#EF476F', '#FF9E9E', '#CDB4FF'],
   };
 
   let W = 0, H = 0, dpr = 1;
@@ -96,6 +125,19 @@
   let fillHold = 0;
   let containerIndex = 0;
   let targetArea = 1;
+  let timeSec = 0;
+
+  // Container transition: play → celebrate → exit → enter → play
+  let phase = 'play';
+  let transT = 0;
+  let transDur = 0.55;
+  let containerSlide = 0; // px offset for glass draw/collision
+  let pendingContainerIndex = 0;
+
+  // Face animation
+  let blinkT = 0;
+  let nextBlink = 2.2 + Math.random() * 1.8;
+  let blinkAmount = 0; // 0 open → 1 closed
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 3);
@@ -109,6 +151,12 @@
   }
 
   function vdist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
 
   // ========== SoundEngine ==========
   const Sound = (function () {
@@ -147,7 +195,7 @@
       if (!a || !unlocked) return;
       const osc = a.createOscillator();
       const filter = a.createBiquadFilter();
-      const g = envGain(a, 0.12 * Math.min(1, intensity), 0.01, 0.08);
+      const g = envGain(a, 0.11 * Math.min(1, intensity), 0.01, 0.09);
       osc.type = 'sine';
       const t = a.currentTime;
       osc.frequency.setValueAtTime(150, t);
@@ -165,7 +213,7 @@
       const a = ensure();
       if (!a || !unlocked) return;
       const osc = a.createOscillator();
-      const g = envGain(a, 0.28, 0.005, 0.05);
+      const g = envGain(a, 0.24, 0.005, 0.05);
       osc.type = 'triangle';
       const t = a.currentTime;
       osc.frequency.setValueAtTime(90, t);
@@ -196,19 +244,38 @@
       const a = ensure();
       if (!a || !unlocked) return;
       const t = a.currentTime;
-      [1046.5, 1567.9].forEach((f, i) => {
+      [1046.5, 1318.5, 1567.9].forEach((f, i) => {
         const osc = a.createOscillator();
-        const g = envGain(a, 0.18, 0.01, 0.55);
+        const g = envGain(a, 0.14, 0.01, 0.55);
         osc.type = 'sine';
         osc.frequency.value = f;
         osc.connect(g);
         g.connect(a.destination);
-        osc.start(t + i * 0.02);
-        osc.stop(t + 0.7);
+        osc.start(t + i * 0.03);
+        osc.stop(t + 0.75);
       });
     }
 
-    return { unlock, playSquish, playThud, playPop, playChime, isUnlocked: () => unlocked };
+    function playWhoosh() {
+      const a = ensure();
+      if (!a || !unlocked) return;
+      const osc = a.createOscillator();
+      const g = envGain(a, 0.06, 0.02, 0.22);
+      const filter = a.createBiquadFilter();
+      osc.type = 'triangle';
+      const t = a.currentTime;
+      osc.frequency.setValueAtTime(220, t);
+      osc.frequency.exponentialRampToValueAtTime(90, t + 0.25);
+      filter.type = 'bandpass';
+      filter.frequency.value = 400;
+      osc.connect(filter);
+      filter.connect(g);
+      g.connect(a.destination);
+      osc.start(t);
+      osc.stop(t + 0.3);
+    }
+
+    return { unlock, playSquish, playThud, playPop, playChime, playWhoosh, isUnlocked: () => unlocked };
   })();
 
   // ========== Particles ==========
@@ -218,16 +285,16 @@
   function spawnConfetti(x, y, n) {
     for (let i = 0; i < n; i++) {
       const ang = Math.random() * Math.PI * 2;
-      const spd = 3 + Math.random() * 7;
+      const spd = 3.5 + Math.random() * 8;
       particles.push({
         x, y,
         vx: Math.cos(ang) * spd,
-        vy: Math.sin(ang) * spd - 4,
-        life: 0.9 + Math.random() * 0.6,
+        vy: Math.sin(ang) * spd - 5,
+        life: 1.0 + Math.random() * 0.7,
         color: COLORS.confetti[(Math.random() * COLORS.confetti.length) | 0],
-        size: 3 + Math.random() * 4,
+        size: 3 + Math.random() * 5,
         rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.4,
+        vr: (Math.random() - 0.5) * 0.45,
       });
     }
   }
@@ -253,11 +320,18 @@
       ctx.rotate(p.rot);
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life));
       ctx.fillStyle = p.color;
-      if (i % 2 === 0) {
-        ctx.fillRect(-p.size * 0.5, -p.size * 0.3, p.size, p.size * 0.6);
+      if (i % 3 === 0) {
+        ctx.beginPath();
+        ctx.moveTo(0, -p.size * 0.55);
+        ctx.lineTo(p.size * 0.45, p.size * 0.4);
+        ctx.lineTo(-p.size * 0.45, p.size * 0.4);
+        ctx.closePath();
+        ctx.fill();
+      } else if (i % 2 === 0) {
+        ctx.fillRect(-p.size * 0.5, -p.size * 0.28, p.size, p.size * 0.56);
       } else {
         ctx.beginPath();
-        ctx.arc(0, 0, p.size * 0.45, 0, Math.PI * 2);
+        ctx.arc(0, 0, p.size * 0.42, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.restore();
@@ -268,9 +342,9 @@
   // ========== Soft body ==========
   const OUTER_N = 16;
   const CONSTRAINT_ITERS = 5;
-  const DAMPING = 0.986;
-  const GRAVITY = 0.16;
-  const RADIUS = () => Math.min(W, H) * 0.145;
+  const DAMPING = 0.984;
+  const GRAVITY = 0.155;
+  const RADIUS = () => Math.min(W, H) * 0.148;
 
   /** @type {{x:number,y:number,ox:number,oy:number,pinned:boolean}[]} */
   let points = [];
@@ -292,10 +366,10 @@
     for (let i = 0; i < OUTER_N; i++) {
       const a = 1 + i;
       const b = 1 + ((i + 1) % OUTER_N);
-      springs.push({ a, b, rest: vdist(points[a], points[b]), stiffness: 0.58 });
-      springs.push({ a: 0, b: a, rest: r, stiffness: 0.38 });
+      springs.push({ a, b, rest: vdist(points[a], points[b]), stiffness: 0.56 });
+      springs.push({ a: 0, b: a, rest: r, stiffness: 0.36 });
       const c = 1 + ((i + 2) % OUTER_N);
-      springs.push({ a, b: c, rest: vdist(points[a], points[c]), stiffness: 0.24 });
+      springs.push({ a, b: c, rest: vdist(points[a], points[c]), stiffness: 0.22 });
     }
     targetArea = shoelaceArea();
   }
@@ -315,7 +389,7 @@
     if (targetArea <= 0) return;
     const deficit = (targetArea - area) / targetArea;
     if (deficit <= 0.02) return;
-    const pressure = Math.min(0.55, deficit * 0.85);
+    const pressure = Math.min(0.52, deficit * 0.82);
     const c = points[0];
     for (let i = 1; i <= OUTER_N; i++) {
       const p = points[i];
@@ -323,8 +397,8 @@
       let ny = p.y - c.y;
       const len = Math.hypot(nx, ny) || 1;
       nx /= len; ny /= len;
-      p.x += nx * pressure * 2.2;
-      p.y += ny * pressure * 2.2;
+      p.x += nx * pressure * 2.15;
+      p.y += ny * pressure * 2.15;
     }
   }
 
@@ -342,29 +416,37 @@
     }
   }
 
-  // ========== Containers (segment arrays) ==========
-  /** @type {{id:string, segments:{ax:number,ay:number,bx:number,by:number}[], neckY:number, path:{x:number,y:number}[], cx:number, mouthX:number, mouthY:number, mouthW:number}} */
+  // ========== Containers ==========
+  /** @type {{id:string, segments:{ax:number,ay:number,bx:number,by:number}[], neckY:number, path:{x:number,y:number}[], cx:number, mouthX:number, mouthY:number, mouthW:number, stem?:{x:number,y:number}[]}} */
   let container = null;
+
+  function offsetSeg(seg, ox) {
+    return { ax: seg.ax + ox, ay: seg.ay, bx: seg.bx + ox, by: seg.by };
+  }
 
   function buildGoblet() {
     const cx = W * 0.5;
-    const baseY = H * 0.92;
-    const topY = H * 0.52;
-    const neckY = H * 0.62;
-    const bowlY = H * 0.78;
-    const rimW = Math.min(W, H) * 0.13;
-    const neckW = Math.min(W, H) * 0.055;
-    const bowlW = Math.min(W, H) * 0.16;
-    const bottomW = Math.min(W, H) * 0.14;
+    const baseY = H * 0.915;
+    const topY = H * 0.50;
+    const neckY = H * 0.605;
+    const bowlY = H * 0.76;
+    const footY = H * 0.88;
+    const rimW = Math.min(W, H) * 0.135;
+    const neckW = Math.min(W, H) * 0.052;
+    const bowlW = Math.min(W, H) * 0.168;
+    const footW = Math.min(W, H) * 0.095;
+    const bottomW = Math.min(W, H) * 0.145;
 
     const L = [
       { x: cx - rimW, y: topY },
       { x: cx - neckW, y: neckY },
       { x: cx - bowlW, y: bowlY },
+      { x: cx - footW, y: footY },
       { x: cx - bottomW, y: baseY },
     ];
     const R = [
       { x: cx + bottomW, y: baseY },
+      { x: cx + footW, y: footY },
       { x: cx + bowlW, y: bowlY },
       { x: cx + neckW, y: neckY },
       { x: cx + rimW, y: topY },
@@ -392,24 +474,27 @@
 
   function buildBeaker() {
     const cx = W * 0.5;
-    const topY = H * 0.55;
+    const topY = H * 0.52;
     const baseY = H * 0.90;
-    const half = Math.min(W, H) * 0.17;
+    const half = Math.min(W, H) * 0.175;
+    const lip = Math.min(W, H) * 0.012;
     const path = [
-      { x: cx - half, y: topY },
+      { x: cx - half - lip, y: topY },
+      { x: cx - half, y: topY + lip * 1.4 },
       { x: cx - half, y: baseY },
       { x: cx + half, y: baseY },
-      { x: cx + half, y: topY },
+      { x: cx + half, y: topY + lip * 1.4 },
+      { x: cx + half + lip, y: topY },
     ];
     const segments = [
-      { ax: cx - half, ay: topY, bx: cx - half, by: baseY },
+      { ax: cx - half, ay: topY + lip * 1.4, bx: cx - half, by: baseY },
       { ax: cx - half, ay: baseY, bx: cx + half, by: baseY },
-      { ax: cx + half, ay: baseY, bx: cx + half, by: topY },
+      { ax: cx + half, ay: baseY, bx: cx + half, by: topY + lip * 1.4 },
     ];
     return {
       id: 'beaker',
       segments,
-      neckY: topY + (baseY - topY) * 0.12,
+      neckY: topY + (baseY - topY) * 0.10,
       path,
       cx,
       mouthX: cx,
@@ -425,29 +510,16 @@
     container = builders[containerIndex]();
   }
 
-  function projectPointSegment(px, py, ax, ay, bx, by) {
-    const abx = bx - ax, aby = by - ay;
-    const apx = px - ax, apy = py - ay;
-    const ab2 = abx * abx + aby * aby || 1;
-    let t = (apx * abx + apy * aby) / ab2;
-    t = Math.max(0, Math.min(1, t));
-    const qx = ax + abx * t;
-    const qy = ay + aby * t;
-    const dx = px - qx, dy = py - qy;
-    return { qx, qy, dx, dy, dist: Math.hypot(dx, dy), t };
-  }
-
   let thudCooldown = 0;
 
-  /** Left/right inner x at a given y from wall segments (envelope clamp). */
-  function vesselBoundsAtY(y) {
+  function vesselBoundsAtY(y, ox) {
     let left = -Infinity;
     let right = Infinity;
     let bottom = -Infinity;
+    const cx = container.cx + ox;
     for (let s = 0; s < container.segments.length; s++) {
-      const seg = container.segments[s];
+      const seg = offsetSeg(container.segments[s], ox);
       const ax = seg.ax, ay = seg.ay, bx = seg.bx, by = seg.by;
-      // horizontal bottom
       if (Math.abs(ay - by) < 0.5) {
         bottom = Math.max(bottom, ay);
         continue;
@@ -457,30 +529,32 @@
       if (y < minY - 0.5 || y > maxY + 0.5) continue;
       const t = (y - ay) / ((by - ay) || 1e-6);
       const x = ax + (bx - ax) * t;
-      if (x < container.cx) left = Math.max(left, x);
+      if (x < cx) left = Math.max(left, x);
       else right = Math.min(right, x);
     }
-    if (left === -Infinity) left = container.cx - container.mouthW * 0.5;
-    if (right === Infinity) right = container.cx + container.mouthW * 0.5;
+    if (left === -Infinity) left = cx - container.mouthW * 0.5;
+    if (right === Infinity) right = cx + container.mouthW * 0.5;
     if (bottom === -Infinity) bottom = H * 0.92;
     return { left, right, bottom };
   }
 
   function collideContainer() {
-    if (!container) return;
+    if (!container || phase === 'exit' || phase === 'enter') return;
     const inset = 3;
+    const ox = containerSlide;
     const mouthHalf = container.mouthW * 0.55;
+    const cx = container.cx + ox;
     for (let i = 0; i < points.length; i++) {
       const p = points[i];
       if (p.y < container.mouthY) continue;
 
-      const inMouthLane = Math.abs(p.x - container.cx) <= mouthHalf;
-      const inside = pointInVessel(p.x, p.y);
+      const inMouthLane = Math.abs(p.x - cx) <= mouthHalf;
+      const inside = pointInVessel(p.x - ox, p.y);
       if (!inside && !inMouthLane) continue;
 
       const prevX = p.x;
       const prevY = p.y;
-      const b = vesselBoundsAtY(p.y);
+      const b = vesselBoundsAtY(p.y, ox);
       let hitWall = false;
 
       if (p.x < b.left + inset) {
@@ -510,7 +584,6 @@
   function pointInVessel(x, y) {
     if (!container) return false;
     if (y < container.mouthY) return false;
-    // ray cast against closed path (path is open at top — close virtually)
     const poly = container.path;
     let inside = false;
     for (let i = 0, j = poly.length - 1; i < poly.length; i++) {
@@ -560,10 +633,12 @@
 
   function fillRatio() {
     if (!container) return 0;
+    if (phase === 'exit' || phase === 'enter') return 0;
     let inside = 0;
+    const ox = containerSlide;
     for (let i = 1; i <= OUTER_N; i++) {
       const p = points[i];
-      if (p.y >= container.neckY && pointInVessel(p.x, p.y)) inside++;
+      if (p.y >= container.neckY && pointInVessel(p.x - ox, p.y)) inside++;
     }
     return inside / OUTER_N;
   }
@@ -592,7 +667,7 @@
   }
 
   function applyDrag() {
-    if (!dragging || dragIndex < 0 || celebrating) return;
+    if (!dragging || dragIndex < 0 || celebrating || phase !== 'play') return;
     const p = points[dragIndex];
     const dx = pointer.x - p.x;
     const dy = pointer.y - p.y;
@@ -611,6 +686,7 @@
     e.preventDefault();
     Sound.unlock();
     if (pointerId !== null && e.pointerId !== pointerId) return;
+    if (phase !== 'play') return;
     pointerId = e.pointerId;
     canvas.setPointerCapture(pointerId);
     const pos = pointerPos(e);
@@ -646,33 +722,95 @@
   canvas.addEventListener('pointerup', onUp, { passive: false });
   canvas.addEventListener('pointercancel', onUp, { passive: false });
 
-  // ========== Win / reset ==========
+  // ========== Win / transition ==========
   function triggerWin() {
-    if (celebrating) return;
+    if (celebrating || phase !== 'play') return;
     celebrating = true;
-    celebrateTimer = 1.5;
+    phase = 'celebrate';
+    celebrateTimer = 1.15;
     fillHold = 0;
-    shake = 10;
+    shake = 11;
     Sound.playPop();
     Sound.playChime();
     try { if (navigator.vibrate) navigator.vibrate(50); } catch (_) {}
     const c = points[0];
-    spawnConfetti(c.x, c.y, 60);
+    spawnConfetti(c.x, c.y, 72);
     burstEl.textContent = Math.random() > 0.5 ? 'POP!' : 'PURRFECT!';
     burstEl.classList.add('show');
-    setTimeout(() => burstEl.classList.remove('show'), 900);
+    setTimeout(() => burstEl.classList.remove('show'), 950);
   }
 
-  function advanceAfterWin() {
+  function beginExitTransition() {
+    phase = 'exit';
+    transT = 0;
+    transDur = 0.52;
+    pendingContainerIndex = containerIndex + 1;
+    Sound.playWhoosh();
+  }
+
+  function beginEnterTransition() {
+    setContainer(pendingContainerIndex);
     celebrating = false;
     celebrateTimer = 0;
-    setContainer(containerIndex + 1);
-    buildCat(W * 0.5, H * 0.32, RADIUS());
+    buildCat(W * 0.5 - W * 0.85, H * 0.30, RADIUS());
+    phase = 'enter';
+    transT = 0;
+    transDur = 0.58;
+    containerSlide = -W * 0.92;
     particles = [];
     shake = 0;
+    fillHold = 0;
   }
 
-  // ========== Render ==========
+  function finishEnter() {
+    phase = 'play';
+    containerSlide = 0;
+    // settle cat to center-top
+    const targetX = W * 0.5;
+    const targetY = H * 0.30;
+    const c = points[0];
+    const dx = targetX - c.x;
+    const dy = targetY - c.y;
+    for (let i = 0; i < points.length; i++) {
+      points[i].x += dx;
+      points[i].y += dy;
+      points[i].ox += dx;
+      points[i].oy += dy;
+    }
+  }
+
+  function updateTransition(dt) {
+    if (phase === 'exit') {
+      transT += dt;
+      const u = easeInOutCubic(clamp(transT / transDur, 0, 1));
+      containerSlide = u * W * 1.05;
+      // carry cat with glass a bit
+      const push = (dt / transDur) * W * 1.05 * 0.35;
+      for (let i = 0; i < points.length; i++) {
+        points[i].x += push;
+        points[i].ox += push * 0.9;
+      }
+      if (transT >= transDur) beginEnterTransition();
+    } else if (phase === 'enter') {
+      transT += dt;
+      const u = easeOutCubic(clamp(transT / transDur, 0, 1));
+      containerSlide = lerp(-W * 0.92, 0, u);
+      const c = points[0];
+      const wantX = lerp(W * 0.5 - W * 0.85, W * 0.5, u);
+      const wantY = H * 0.30;
+      const dx = (wantX - c.x) * 0.22;
+      const dy = (wantY - c.y) * 0.18;
+      for (let i = 0; i < points.length; i++) {
+        points[i].x += dx;
+        points[i].y += dy;
+        points[i].ox += dx * 0.85;
+        points[i].oy += dy * 0.85;
+      }
+      if (transT >= transDur) finishEnter();
+    }
+  }
+
+  // ========== Render helpers ==========
   function strokeSoftBodyPath() {
     const n = OUTER_N;
     const mid = (i) => {
@@ -708,8 +846,70 @@
     return max;
   }
 
+  function sampleHullSmoothness() {
+    // average absolute turn angle across midpoints (used by older step2 tests)
+    const n = OUTER_N;
+    const mids = [];
+    for (let i = 0; i < n; i++) {
+      const a = points[1 + i];
+      const b = points[1 + ((i + 1) % n)];
+      mids.push({ x: (a.x + b.x) * 0.5, y: (a.y + b.y) * 0.5 });
+    }
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      const p0 = mids[(i - 1 + n) % n];
+      const p1 = mids[i];
+      const p2 = mids[(i + 1) % n];
+      const a1 = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+      const a2 = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+      let d = a2 - a1;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      sum += Math.abs(d);
+    }
+    return sum / n;
+  }
+
+  function updateBlink(dt) {
+    blinkT += dt;
+    if (blinkAmount > 0) {
+      blinkAmount = Math.max(0, blinkAmount - dt * 7.5);
+    } else if (blinkT >= nextBlink) {
+      blinkAmount = 1;
+      blinkT = 0;
+      nextBlink = 2.0 + Math.random() * 2.4;
+    }
+  }
+
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, COLORS.bgTop);
+    g.addColorStop(1, COLORS.bgBot);
+    ctx.fillStyle = g;
+    ctx.fillRect(-24, -24, W + 48, H + 48);
+
+    // soft ambient washes
+    const a = ctx.createRadialGradient(W * 0.22, H * 0.18, 10, W * 0.22, H * 0.18, W * 0.55);
+    a.addColorStop(0, 'rgba(255,255,255,0.55)');
+    a.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = a;
+    ctx.fillRect(-24, -24, W + 48, H + 48);
+
+    const b = ctx.createRadialGradient(W * 0.82, H * 0.78, 8, W * 0.82, H * 0.78, W * 0.5);
+    b.addColorStop(0, 'rgba(112, 214, 188, 0.16)');
+    b.addColorStop(1, 'rgba(112, 214, 188, 0)');
+    ctx.fillStyle = b;
+    ctx.fillRect(-24, -24, W + 48, H + 48);
+
+    // soft floor ellipse
+    ctx.beginPath();
+    ctx.ellipse(W * 0.5, H * 0.93, Math.min(W, H) * 0.28, Math.min(W, H) * 0.035, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(90, 70, 120, 0.07)';
+    ctx.fill();
+  }
+
   function drawEars(c) {
-    const tipScale = 0.52;
+    const tipScale = 0.55;
     function ear(baseL, baseR) {
       const mx = (baseL.x + baseR.x) * 0.5;
       const my = (baseL.y + baseR.y) * 0.5;
@@ -721,19 +921,23 @@
       const sign = toC.x * nx + toC.y * ny < 0 ? -1 : 1;
       const tipX = mx + nx * sign * (avgSpokeRest() * tipScale);
       const tipY = my + ny * sign * (avgSpokeRest() * tipScale);
+      // outer ear
       ctx.beginPath();
       ctx.moveTo(baseL.x, baseL.y);
-      ctx.lineTo(tipX, tipY);
-      ctx.lineTo(baseR.x, baseR.y);
+      ctx.quadraticCurveTo(tipX + (baseL.x - mx) * 0.15, tipY + (baseL.y - my) * 0.1, tipX, tipY);
+      ctx.quadraticCurveTo(tipX + (baseR.x - mx) * 0.15, tipY + (baseR.y - my) * 0.1, baseR.x, baseR.y);
       ctx.closePath();
-      ctx.fillStyle = COLORS.cat;
+      const eg = ctx.createLinearGradient(mx, my, tipX, tipY);
+      eg.addColorStop(0, COLORS.cat);
+      eg.addColorStop(1, COLORS.catDeep);
+      ctx.fillStyle = eg;
       ctx.fill();
+      // inner ear
       ctx.beginPath();
-      ctx.moveTo(baseL.x * 0.65 + tipX * 0.35, baseL.y * 0.65 + tipY * 0.35);
-      ctx.lineTo(tipX * 0.85 + mx * 0.15, tipY * 0.85 + my * 0.15);
-      ctx.lineTo(baseR.x * 0.65 + tipX * 0.35, baseR.y * 0.65 + tipY * 0.35);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(255, 82, 119, 0.35)';
+      ctx.moveTo(lerp(baseL.x, tipX, 0.28), lerp(baseL.y, tipY, 0.28));
+      ctx.quadraticCurveTo(tipX, tipY, lerp(baseR.x, tipX, 0.28), lerp(baseR.y, tipY, 0.28));
+      ctx.quadraticCurveTo(mx, my, lerp(baseL.x, tipX, 0.28), lerp(baseL.y, tipY, 0.28));
+      ctx.fillStyle = 'rgba(255, 110, 140, 0.42)';
       ctx.fill();
     }
     ear(points[OUTER_N], points[1]);
@@ -741,65 +945,147 @@
   }
 
   function drawFace(c) {
-    const lookTarget = dragging ? pointer : { x: c.x, y: c.y - 10 };
+    const lookTarget = dragging ? pointer : { x: c.x + Math.sin(timeSec * 0.7) * 8, y: c.y - 12 };
     let lx = lookTarget.x - c.x;
     let ly = lookTarget.y - c.y;
     const llen = Math.hypot(lx, ly) || 1;
     lx /= llen; ly /= llen;
-    const lookAmt = 4.5;
-    const squint = stretchRatio() > 1.45 || fillRatio() > 0.7;
-    const eyeY = c.y - 6;
-    const eyeSpread = 11;
-    const eyeR = squint ? 2.2 : 3.6;
-    const pupilR = squint ? 1.1 : 1.7;
+    const lookAmt = 4.8;
+
+    const stressed = stretchRatio() > 1.42 || fillRatio() > 0.72;
+    const happy = celebrating || fillRatio() > 0.85;
+    const squintBase = stressed ? 0.72 : 0;
+    const lid = clamp(Math.max(squintBase, blinkAmount), 0, 1);
+
+    const eyeY = c.y - 6.5;
+    const eyeSpread = 11.5;
+    const eyeR = lerp(3.7, 2.1, lid);
+    const eyeH = lerp(3.7, 0.55, lid);
+    const pupilR = lerp(1.75, 0.9, lid);
+
+    // cheeks
+    ctx.beginPath();
+    ctx.ellipse(c.x - 16, c.y + 5, 6.5, 4.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x + 16, c.y + 5, 6.5, 4.2, 0, 0, Math.PI * 2);
+    ctx.fillStyle = COLORS.cheek;
+    ctx.fill();
 
     function eye(ex) {
-      const ox = ex + lx * lookAmt;
-      const oy = eyeY + ly * lookAmt * 0.35;
+      const ox = ex + lx * lookAmt * (1 - lid * 0.4);
+      const oy = eyeY + ly * lookAmt * 0.32;
       ctx.beginPath();
-      if (squint) ctx.ellipse(ox, oy, eyeR * 1.6, eyeR * 0.55, 0, 0, Math.PI * 2);
-      else ctx.arc(ox, oy, eyeR, 0, Math.PI * 2);
+      ctx.ellipse(ox, oy, eyeR * (stressed ? 1.35 : 1), eyeH, 0, 0, Math.PI * 2);
       ctx.fillStyle = '#fff';
       ctx.fill();
-      ctx.beginPath();
-      ctx.arc(ox + lx * 1.2, oy + ly * 1.2, pupilR, 0, Math.PI * 2);
-      ctx.fillStyle = '#3a2a40';
-      ctx.fill();
+      if (lid < 0.85) {
+        ctx.beginPath();
+        ctx.arc(ox + lx * 1.25, oy + ly * 1.1, pupilR, 0, Math.PI * 2);
+        ctx.fillStyle = COLORS.ink;
+        ctx.fill();
+        // glossy highlight
+        ctx.beginPath();
+        ctx.arc(ox + lx * 1.25 - 0.8, oy + ly * 1.1 - 0.9, pupilR * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fill();
+      }
+      // soft lid crease when blinking/squinting
+      if (lid > 0.15) {
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(255, 82, 119, 0.35)';
+        ctx.lineWidth = 1.4;
+        ctx.lineCap = 'round';
+        ctx.moveTo(ox - eyeR * 1.1, oy);
+        ctx.quadraticCurveTo(ox, oy - eyeH * 0.2, ox + eyeR * 1.1, oy);
+        ctx.stroke();
+      }
     }
     eye(c.x - eyeSpread);
     eye(c.x + eyeSpread);
 
+    // nose
     ctx.beginPath();
-    ctx.moveTo(c.x, c.y + 2);
-    ctx.lineTo(c.x - 3.5, c.y + 7);
-    ctx.lineTo(c.x + 3.5, c.y + 7);
+    ctx.moveTo(c.x, c.y + 1.5);
+    ctx.lineTo(c.x - 3.8, c.y + 7.2);
+    ctx.lineTo(c.x + 3.8, c.y + 7.2);
     ctx.closePath();
     ctx.fillStyle = COLORS.face;
     ctx.fill();
 
+    // mouth
     ctx.beginPath();
     ctx.strokeStyle = COLORS.face;
-    ctx.lineWidth = 1.6;
+    ctx.lineWidth = 1.7;
     ctx.lineCap = 'round';
-    if (squint) ctx.arc(c.x, c.y + 12, 5, 0.15 * Math.PI, 0.85 * Math.PI);
-    else {
-      ctx.moveTo(c.x - 5, c.y + 11);
-      ctx.quadraticCurveTo(c.x, c.y + 15, c.x + 5, c.y + 11);
+    if (happy) {
+      ctx.arc(c.x, c.y + 11, 6.2, 0.12 * Math.PI, 0.88 * Math.PI);
+    } else if (stressed) {
+      ctx.moveTo(c.x - 4.5, c.y + 13.5);
+      ctx.quadraticCurveTo(c.x, c.y + 11.2, c.x + 4.5, c.y + 13.5);
+    } else {
+      ctx.moveTo(c.x - 5.2, c.y + 11.2);
+      ctx.quadraticCurveTo(c.x, c.y + 15.5, c.x + 5.2, c.y + 11.2);
     }
     ctx.stroke();
+
+    // tiny whiskers
+    ctx.strokeStyle = 'rgba(255, 82, 119, 0.28)';
+    ctx.lineWidth = 1.1;
+    [[-1, -0.2], [-1, 0.25], [1, -0.2], [1, 0.25]].forEach(([side, yo], i) => {
+      ctx.beginPath();
+      const wx = c.x + side * 8;
+      const wy = c.y + 8 + yo * 8;
+      ctx.moveTo(wx, wy);
+      ctx.quadraticCurveTo(wx + side * 10, wy + (i % 2 ? 2 : -2), wx + side * 18, wy + yo * 4);
+      ctx.stroke();
+    });
   }
 
   function drawContainer() {
     if (!container) return;
-    const locked = fillRatio() >= 0.85;
-    ctx.beginPath();
+    const ox = containerSlide;
+    const locked = phase === 'play' && fillRatio() >= 0.85;
+    const fill = phase === 'play' ? fillRatio() : 0;
     const poly = container.path;
+
+    ctx.save();
+    ctx.translate(ox, 0);
+
+    // soft contact shadow under glass
+    ctx.beginPath();
+    ctx.ellipse(container.cx, H * 0.925, container.mouthW * 0.42, 10, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(70, 55, 100, 0.08)';
+    ctx.fill();
+
+    // glass body fill
+    ctx.beginPath();
     ctx.moveTo(poly[0].x, poly[0].y);
     for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
     ctx.closePath();
-    ctx.fillStyle = COLORS.glassFill;
+    const gf = ctx.createLinearGradient(container.cx, container.mouthY, container.cx, H * 0.9);
+    gf.addColorStop(0, COLORS.glassFillTop);
+    gf.addColorStop(1, COLORS.glassFillBot);
+    ctx.fillStyle = gf;
     ctx.fill();
 
+    // fill progress wash
+    if (fill > 0.05) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(poly[0].x, poly[0].y);
+      for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
+      ctx.closePath();
+      ctx.clip();
+      const top = lerp(H * 0.88, container.neckY - 10, clamp(fill, 0, 1));
+      const pg = ctx.createLinearGradient(0, top, 0, H * 0.9);
+      pg.addColorStop(0, 'rgba(255, 158, 158, 0.0)');
+      pg.addColorStop(0.35, `rgba(255, 158, 158, ${0.08 + fill * 0.12})`);
+      pg.addColorStop(1, `rgba(255, 120, 150, ${0.10 + fill * 0.16})`);
+      ctx.fillStyle = pg;
+      ctx.fillRect(container.cx - container.mouthW, top, container.mouthW * 2, H);
+      ctx.restore();
+    }
+
+    // outer stroke
     ctx.beginPath();
     for (let s = 0; s < container.segments.length; s++) {
       const seg = container.segments[s];
@@ -807,15 +1093,56 @@
       ctx.lineTo(seg.bx, seg.by);
     }
     ctx.strokeStyle = locked ? COLORS.lock : COLORS.glass;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 5.5;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (locked) {
       ctx.shadowColor = COLORS.lock;
-      ctx.shadowBlur = 15;
+      ctx.shadowBlur = 16;
+    } else if (fill > 0.4) {
+      ctx.shadowColor = 'rgba(112, 214, 188, 0.45)';
+      ctx.shadowBlur = 8 + fill * 10;
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // rim highlight
+    ctx.beginPath();
+    ctx.moveTo(container.cx - container.mouthW * 0.5, container.mouthY);
+    ctx.lineTo(container.cx + container.mouthW * 0.5, container.mouthY);
+    ctx.strokeStyle = COLORS.glassRim;
+    ctx.lineWidth = 3.2;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    // inner specular edge (left)
+    ctx.beginPath();
+    const leftSeg = container.segments[0];
+    ctx.moveTo(leftSeg.ax + 3.5, leftSeg.ay + 8);
+    ctx.lineTo(leftSeg.bx + 3.5, leftSeg.by - 8);
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // goblet stem polish line
+    if (container.id === 'goblet') {
+      ctx.beginPath();
+      ctx.moveTo(container.cx, container.neckY + 8);
+      ctx.lineTo(container.cx, H * 0.86);
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  function drawCatShadow(c) {
+    const r = avgSpokeRest();
+    ctx.beginPath();
+    ctx.ellipse(c.x + 2, c.y + r * 0.92, r * 0.72, r * 0.18, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(80, 55, 110, 0.10)';
+    ctx.fill();
   }
 
   function draw() {
@@ -824,33 +1151,41 @@
     ctx.save();
     ctx.translate(ox, oy);
 
-    ctx.clearRect(-20, -20, W + 40, H + 40);
-    ctx.fillStyle = COLORS.bg;
-    ctx.fillRect(-20, -20, W + 40, H + 40);
-
+    ctx.clearRect(-30, -30, W + 60, H + 60);
+    drawBackground();
     drawContainer();
 
     const c = points[0];
+    drawCatShadow(c);
     drawEars(c);
 
+    // body
     ctx.beginPath();
     strokeSoftBodyPath();
-    const grad = ctx.createRadialGradient(c.x - 18, c.y - 22, 8, c.x, c.y, avgSpokeRest() * 1.2);
-    grad.addColorStop(0, '#FFB4B4');
-    grad.addColorStop(0.55, COLORS.cat);
+    const grad = ctx.createRadialGradient(c.x - 20, c.y - 24, 6, c.x, c.y, avgSpokeRest() * 1.25);
+    grad.addColorStop(0, '#FFC2C8');
+    grad.addColorStop(0.45, COLORS.cat);
+    grad.addColorStop(0.82, COLORS.catMid);
     grad.addColorStop(1, COLORS.catDeep);
     ctx.fillStyle = grad;
     ctx.fill();
 
+    // jelly highlight
     ctx.beginPath();
-    ctx.ellipse(c.x - 16, c.y - 20, 18, 12, -0.4, 0, Math.PI * 2);
+    ctx.ellipse(c.x - 18, c.y - 22, 20, 13, -0.45, 0, Math.PI * 2);
     ctx.fillStyle = COLORS.highlight;
+    ctx.fill();
+
+    // secondary smaller gloss
+    ctx.beginPath();
+    ctx.ellipse(c.x + 10, c.y - 8, 6, 4, 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
     ctx.fill();
 
     ctx.beginPath();
     strokeSoftBodyPath();
-    ctx.strokeStyle = 'rgba(255, 82, 119, 0.22)';
-    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(255, 82, 119, 0.18)';
+    ctx.lineWidth = 2.2;
     ctx.stroke();
 
     drawFace(c);
@@ -864,12 +1199,14 @@
     lastTime = t;
     dt = Math.min(dt, 0.033);
     const dtScale = dt / (1 / 60);
+    timeSec += dt;
 
     if (thudCooldown > 0) thudCooldown -= dt;
     if (squishCooldown > 0) squishCooldown -= dt;
     if (shake > 0) shake = Math.max(0, shake - dt * 28);
+    updateBlink(dt);
 
-    if (!celebrating) {
+    if (phase === 'play') {
       const steps = 2;
       for (let i = 0; i < steps; i++) {
         verletIntegrate(dtScale / steps);
@@ -883,12 +1220,15 @@
       } else {
         fillHold = Math.max(0, fillHold - dt * 1.5);
       }
-    } else {
+    } else if (phase === 'celebrate') {
       celebrateTimer -= dt;
-      // keep soft jiggle while celebrating
       verletIntegrate(dtScale * 0.3);
       satisfyConstraints();
-      if (celebrateTimer <= 0) advanceAfterWin();
+      if (celebrateTimer <= 0) beginExitTransition();
+    } else if (phase === 'exit' || phase === 'enter') {
+      verletIntegrate(dtScale * 0.45);
+      satisfyConstraints();
+      updateTransition(dt);
     }
 
     updateParticles(dt);
@@ -901,13 +1241,17 @@
     setContainer(0);
     buildCat(W * 0.5, H * 0.30, RADIUS());
     lastTime = 0;
+    phase = 'play';
+    containerSlide = 0;
     requestAnimationFrame(frame);
   }
 
   window.addEventListener('resize', () => {
     resize();
-    setContainer(containerIndex);
-    buildCat(W * 0.5, H * 0.30, RADIUS());
+    if (phase === 'play' || phase === 'celebrate') {
+      setContainer(containerIndex);
+      buildCat(W * 0.5, H * 0.30, RADIUS());
+    }
   });
 
   window.__liquidCat = {
@@ -923,16 +1267,18 @@
     getContainerIndex: () => containerIndex,
     isCelebrating: () => celebrating,
     getParticleCount: () => particles.length,
+    getStretchRatio: () => stretchRatio(),
+    sampleHullSmoothness: () => sampleHullSmoothness(),
+    getPhase: () => phase,
     getMouth: () => container ? {
-      x: container.mouthX,
+      x: container.mouthX + containerSlide,
       y: container.mouthY,
       w: container.mouthW,
       neckY: container.neckY,
     } : null,
-    /** Test helper: pack cat into vessel to validate win loop */
     debugPackIntoContainer: () => {
-      if (!container) return;
-      const cx = container.cx;
+      if (!container || phase === 'exit' || phase === 'enter') return;
+      const cx = container.cx + containerSlide;
       const cy = (container.neckY + H * 0.88) * 0.5;
       const r = Math.min(container.mouthW * 0.28, (H * 0.88 - container.neckY) * 0.28);
       buildCat(cx, cy, r);
