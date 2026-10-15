@@ -327,7 +327,8 @@ function update(dt) {
   for (const p of amb) { p.y += p.vy * dt; p.rot += p.vr * dt; if (p.y > H + 10) { p.y = -10; p.x = rnd(0, W); } }
   if (state === 'fly') {
     flyT += dt;
-    if (inVase() >= Math.ceil(0.8 * (N + 1))) { win(); return; }
+    // Brief fly window so debug/place + natural entry both register as flight first
+    if (flyT > 0.12 && inVase() >= Math.ceil(0.8 * (N + 1))) { win(); return; }
     const c = com(), sp = Math.hypot(px[0] - ox[0], py[0] - oy[0]) / H120;
     calmT = (sp < 60 * u && c.y > H * 0.8) ? calmT + dt : 0;
     if (calmT > 0.9 || flyT > 7) resetRound(false);
@@ -591,7 +592,7 @@ function placeCatInVase() {
     py[k + 1] = cy + Math.sin(a) * R * 0.85;
   }
   for (let i = 0; i <= N; i++) { ox[i] = px[i]; oy[i] = py[i]; }
-  state = 'fly'; stateT = 0; flyT = 0.2; calmT = 0;
+  state = 'fly'; stateT = 0; flyT = 0; calmT = 0;
 }
 function launchTowardVase() {
   const c = com();
