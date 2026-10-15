@@ -50,6 +50,13 @@
       letter-spacing: 0.04em;
       text-shadow: 0 1px 0 rgba(255,255,255,0.6);
     }
+    #fillLabel.full {
+      color: #FF4D8D;
+      text-shadow:
+        0 0 8px rgba(255, 77, 141, 0.85),
+        0 0 18px rgba(255, 77, 141, 0.45),
+        0 1px 0 rgba(255,255,255,0.5);
+    }
     #barWrap {
       margin: 8px auto 0;
       width: min(78%, 320px);
@@ -88,22 +95,23 @@
     #burst {
       position: fixed;
       left: 50%;
-      top: 42%;
-      transform: translate(-50%, -50%) scale(0.5);
+      top: 40%;
+      transform: translate(-50%, -50%) scale(0.5) rotate(-8deg);
       z-index: 3;
       pointer-events: none;
       font-weight: 900;
-      font-size: clamp(36px, 11vw, 56px);
-      color: #FFD166;
+      font-size: clamp(40px, 12vw, 58px);
+      color: #fff;
       letter-spacing: 0.04em;
-      -webkit-text-stroke: 5px var(--ink);
+      -webkit-text-stroke: 6px var(--ink);
       paint-order: stroke fill;
+      text-shadow: 0 6px 0 rgba(74, 47, 106, 0.25);
       opacity: 0;
       transition: opacity 0.15s ease, transform 0.35s cubic-bezier(0.2, 1.5, 0.3, 1);
     }
     #burst.show {
       opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
+      transform: translate(-50%, -50%) scale(1) rotate(-8deg);
     }
     #launch {
       position: fixed;
@@ -112,7 +120,7 @@
       transform: translateX(-50%);
       z-index: 2;
       border: 4px solid var(--ink);
-      background: #E9D5FF;
+      background: linear-gradient(180deg, #FF9EC0, #FF6B9A);
       color: #fff;
       font-weight: 900;
       font-size: 18px;
@@ -163,8 +171,12 @@
 
   const INK = '#4A2F6A';
   const BG = '#F3E8FF';
-  const CAT_COLORS = ['#FF85A2', '#FFD166', '#A78BFA', '#67E8F9', '#FCA5A5'];
-  const CONFETTI = ['#FFD166', '#70D6BC', '#FF85A2', '#C084FC', '#67E8F9', '#FDE68A'];
+  // Primary jelly palette from the procedural-vector spec; extras for later levels
+  const CAT_INNER = '#FFA8BA';
+  const CAT_OUTER = '#FF6584';
+  const CAT_STROKE = '#E04868';
+  const CAT_COLORS = [CAT_OUTER, '#FFD166', '#A78BFA', '#67E8F9', '#FCA5A5'];
+  const CONFETTI = ['#FFD166', '#70D6BC', '#FF85A2', '#C084FC', '#67E8F9', '#FDE68A', '#FF6B9A'];
 
   let W = 0, H = 0, dpr = 1;
   let lastT = 0, time = 0;
@@ -292,18 +304,20 @@
   // ---------- Particles ----------
   let particles = [];
   function spawnConfetti(x, y, n) {
+    const kinds = ['rect', 'star', 'heart', 'note', 'dot'];
     for (let i = 0; i < n; i++) {
       const a = Math.random() * Math.PI * 2;
-      const s = 2.5 + Math.random() * 7;
+      const s = 2.5 + Math.random() * 8;
       particles.push({
         x, y,
         vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s - 5,
-        life: 0.9 + Math.random() * 0.7,
+        vy: Math.sin(a) * s - 5.5,
+        life: 1.0 + Math.random() * 0.8,
         color: CONFETTI[(Math.random() * CONFETTI.length) | 0],
-        size: 4 + Math.random() * 5,
+        size: 4 + Math.random() * 6,
         rot: Math.random() * Math.PI,
-        vr: (Math.random() - 0.5) * 0.4,
+        vr: (Math.random() - 0.5) * 0.45,
+        kind: kinds[i % kinds.length],
       });
     }
   }
@@ -324,7 +338,37 @@
       ctx.rotate(p.rot);
       ctx.globalAlpha = clamp(p.life, 0, 1);
       ctx.fillStyle = p.color;
-      ctx.fillRect(-p.size * 0.5, -p.size * 0.3, p.size, p.size * 0.6);
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 1.5;
+      if (p.kind === 'star') {
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const a = -Math.PI / 2 + i * Math.PI * 2 / 5;
+          const r = i % 2 === 0 ? p.size : p.size * 0.45;
+          const x = Math.cos(a) * r, y = Math.sin(a) * r;
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+      } else if (p.kind === 'heart') {
+        const s = p.size * 0.45;
+        ctx.beginPath();
+        ctx.moveTo(0, s);
+        ctx.bezierCurveTo(-s * 2, -s * 0.2, -s, -s * 1.6, 0, -s * 0.6);
+        ctx.bezierCurveTo(s, -s * 1.6, s * 2, -s * 0.2, 0, s);
+        ctx.fill();
+      } else if (p.kind === 'note') {
+        ctx.beginPath();
+        ctx.arc(-p.size * 0.2, p.size * 0.25, p.size * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(p.size * 0.05, -p.size * 0.55, p.size * 0.18, p.size * 0.9);
+      } else if (p.kind === 'dot') {
+        ctx.beginPath();
+        ctx.arc(0, 0, p.size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        ctx.fillRect(-p.size * 0.5, -p.size * 0.3, p.size, p.size * 0.6);
+      }
       ctx.restore();
     }
     ctx.globalAlpha = 1;
@@ -637,15 +681,15 @@
     if (phase === 'win' || phase === 'swap') return;
     phase = 'win';
     phaseT = 0;
-    shake = 10;
+    shake = 12;
     fillPct = 100;
     updateHud();
     Sound.pop();
-    const c = center();
-    spawnConfetti(c.x, c.y, 40);
-    burstEl.textContent = Math.random() > 0.4 ? 'SWISH! 🐾' : 'POP! 🐾';
+    const c = vase ? { x: vase.cx, y: vase.cy } : center();
+    spawnConfetti(c.x, c.y, 56);
+    burstEl.textContent = 'SWISH!';
     burstEl.classList.add('show');
-    setTimeout(() => burstEl.classList.remove('show'), 900);
+    setTimeout(() => burstEl.classList.remove('show'), 1000);
     try { if (navigator.vibrate) navigator.vibrate(40); } catch (_) {}
   }
 
@@ -670,6 +714,7 @@
   function updateHud() {
     fillLabel.textContent = (fillPct | 0) + '% FULL';
     barFill.style.width = clamp(fillPct, 0, 100) + '%';
+    fillLabel.classList.toggle('full', fillPct >= 100);
   }
 
   function onDown(e) {
@@ -768,28 +813,65 @@
     ctx.closePath();
   }
 
+  /** Surface radius toward a world angle from COM (for upright ears). */
+  function surfaceRadius(c, worldAng) {
+    let best = restR, bestDiff = Infinity;
+    for (let i = 1; i <= N; i++) {
+      const p = points[i];
+      let ang = Math.atan2(p.y - c.y, p.x - c.x);
+      let d = ang - worldAng;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      d = Math.abs(d);
+      if (d < bestDiff) {
+        bestDiff = d;
+        best = hypot(p.x - c.x, p.y - c.y) || restR;
+      }
+    }
+    return best;
+  }
+
   function drawBackground() {
-    ctx.fillStyle = BG;
-    ctx.fillRect(-20, -20, W + 40, H + 40);
-    // soft ambient blobs
-    const g = ctx.createRadialGradient(W * 0.2, H * 0.15, 10, W * 0.2, H * 0.15, W * 0.5);
-    g.addColorStop(0, 'rgba(255,255,255,0.55)');
-    g.addColorStop(1, 'rgba(255,255,255,0)');
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#E6DFFF');
+    g.addColorStop(1, '#FFE8F2');
     ctx.fillStyle = g;
     ctx.fillRect(-20, -20, W + 40, H + 40);
+    const a = ctx.createRadialGradient(W * 0.2, H * 0.12, 8, W * 0.2, H * 0.12, W * 0.55);
+    a.addColorStop(0, 'rgba(255,255,255,0.55)');
+    a.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = a;
+    ctx.fillRect(-20, -20, W + 40, H + 40);
+  }
+
+  function drawWinRays() {
+    if (phase !== 'win' || !vase) return;
+    const cx = vase.cx + (vase.slide || 0);
+    const cy = vase.cy;
+    ctx.save();
+    ctx.globalAlpha = 0.18 * (1 - clamp(phaseT / 1.1, 0, 1));
+    ctx.translate(cx, cy);
+    ctx.fillStyle = '#fff';
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + time * 0.4;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a - 0.08) * H * 0.55, Math.sin(a - 0.08) * H * 0.55);
+      ctx.lineTo(Math.cos(a + 0.08) * H * 0.55, Math.sin(a + 0.08) * H * 0.55);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
   }
 
   function drawSlingshot() {
     const s = sling();
     const c = center();
-    // wood forks
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 6;
-    ctx.fillStyle = '#E8C48A';
-    [[s.fork1.x - 50, s.fork1.y, s.fork1.x, s.fork1.y],
-     [s.fork2.x - 50, s.fork2.y, s.fork2.x, s.fork2.y]].forEach(([ax, ay, bx, by]) => {
+    // Y-fork wood (reference asset language)
+    [[s.fork1.x - 52, s.fork1.y, s.fork1.x, s.fork1.y],
+     [s.fork2.x - 52, s.fork2.y, s.fork2.x, s.fork2.y]].forEach(([ax, ay, bx, by]) => {
       ctx.beginPath();
       ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
       ctx.lineWidth = 18;
@@ -798,24 +880,30 @@
       ctx.lineWidth = 12;
       ctx.strokeStyle = '#E8C48A';
       ctx.stroke();
+      // grain
+      ctx.strokeStyle = 'rgba(120, 80, 40, 0.25)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(ax + 8, ay - 2); ctx.lineTo(bx - 4, by - 2);
+      ctx.stroke();
     });
-    // pouch bands
     const pouch = (phase === 'aim' || phase === 'idle') ? c : s.rest;
+    // elastic outline then fill band
     ctx.beginPath();
     ctx.moveTo(s.fork1.x, s.fork1.y);
-    ctx.quadraticCurveTo(pouch.x - 10, pouch.y - 8, pouch.x, pouch.y);
+    ctx.quadraticCurveTo(pouch.x - 12, pouch.y - 10, pouch.x, pouch.y);
     ctx.moveTo(s.fork2.x, s.fork2.y);
-    ctx.quadraticCurveTo(pouch.x - 10, pouch.y + 8, pouch.x, pouch.y);
+    ctx.quadraticCurveTo(pouch.x - 12, pouch.y + 10, pouch.x, pouch.y);
     ctx.strokeStyle = INK;
-    ctx.lineWidth = 8;
+    ctx.lineWidth = 9;
     ctx.stroke();
     ctx.beginPath();
     ctx.moveTo(s.fork1.x, s.fork1.y);
-    ctx.quadraticCurveTo(pouch.x - 10, pouch.y - 8, pouch.x, pouch.y);
+    ctx.quadraticCurveTo(pouch.x - 12, pouch.y - 10, pouch.x, pouch.y);
     ctx.moveTo(s.fork2.x, s.fork2.y);
-    ctx.quadraticCurveTo(pouch.x - 10, pouch.y + 8, pouch.x, pouch.y);
-    ctx.strokeStyle = '#FDE68A';
-    ctx.lineWidth = 4.5;
+    ctx.quadraticCurveTo(pouch.x - 12, pouch.y + 10, pouch.x, pouch.y);
+    ctx.strokeStyle = '#F5D08A';
+    ctx.lineWidth = 5;
     ctx.stroke();
   }
 
@@ -824,46 +912,107 @@
     const ox = vase.slide || 0;
     ctx.save();
     ctx.translate(ox, 0);
-    // shadow
+    // soft table shadow
     ctx.beginPath();
-    ctx.ellipse(vase.cx + 10, vase.cy + 100 * vase.scale, 55 * vase.scale, 14, vase.ang, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(74, 47, 106, 0.12)';
+    ctx.ellipse(vase.cx + 8, vase.cy + 105 * vase.scale, 58 * vase.scale, 15, vase.ang * 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(74, 47, 106, 0.14)';
     ctx.fill();
-    // body fill
+
+    // frosted body
     ctx.beginPath();
     ctx.moveTo(vase.path[0].x, vase.path[0].y);
     for (let i = 1; i < vase.path.length; i++) ctx.lineTo(vase.path[i].x, vase.path[i].y);
     ctx.closePath();
-    const gf = ctx.createLinearGradient(vase.cx - 40, vase.cy - 80, vase.cx + 40, vase.cy + 90);
-    gf.addColorStop(0, 'rgba(255,255,255,0.45)');
-    gf.addColorStop(0.5, 'rgba(112, 214, 188, 0.18)');
-    gf.addColorStop(1, 'rgba(112, 214, 188, 0.28)');
+    const gf = ctx.createRadialGradient(vase.cx - 20, vase.cy - 30, 8, vase.cx, vase.cy, 120 * vase.scale);
+    gf.addColorStop(0, 'rgba(255,255,255,0.55)');
+    gf.addColorStop(0.45, 'rgba(160, 235, 220, 0.22)');
+    gf.addColorStop(1, 'rgba(112, 214, 188, 0.32)');
     ctx.fillStyle = gf;
     ctx.fill();
-    // stroke
-    ctx.strokeStyle = 'rgba(112, 214, 188, 0.85)';
+
+    // when winning, paint liquid cat fill inside glass
+    if (phase === 'win' || (phase === 'fly' && fillPct > 55)) {
+      ctx.save();
+      ctx.clip();
+      const fillH = lerp(0.25, 0.92, clamp(fillPct / 100, 0, 1));
+      const lg = ctx.createLinearGradient(0, vase.cy + 90 * vase.scale, 0, vase.cy - 80 * vase.scale);
+      lg.addColorStop(0, 'rgba(255, 101, 132, 0.75)');
+      lg.addColorStop(fillH, 'rgba(255, 168, 186, 0.55)');
+      lg.addColorStop(1, 'rgba(255, 168, 186, 0)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(vase.cx - 90 * vase.scale, vase.cy - 110 * vase.scale, 180 * vase.scale, 220 * vase.scale);
+      // jelly highlight streaks
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(vase.cx - 25 * vase.scale, vase.cy + 10 * vase.scale);
+      ctx.quadraticCurveTo(vase.cx - 5, vase.cy - 20 * vase.scale, vase.cx + 20 * vase.scale, vase.cy + 5 * vase.scale);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.strokeStyle = 'rgba(112, 214, 188, 0.9)';
     ctx.lineWidth = 6;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     ctx.stroke();
+
     // rim flange
     const rimL = vase.path[0], rimR = vase.path[vase.path.length - 1];
     const mx = (rimL.x + rimR.x) * 0.5, my = (rimL.y + rimR.y) * 0.5;
     const rw = hypot(rimR.x - rimL.x, rimR.y - rimL.y) * 0.55;
     ctx.beginPath();
-    ctx.ellipse(mx, my, rw, 8 * vase.scale, vase.ang, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+    ctx.ellipse(mx, my, rw, 9 * vase.scale, vase.ang, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(112, 214, 188, 0.95)';
     ctx.lineWidth = 5;
     ctx.stroke();
-    // specular
-    ctx.beginPath();
-    ctx.moveTo(vase.path[1].x + 6, vase.path[1].y);
-    ctx.lineTo(vase.path[2].x + 8, vase.path[2].y);
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+
+    // glass speculars (asset-sheet language)
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)';
     ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vase.path[1].x + 5, vase.path[1].y + 4);
+    ctx.lineTo(vase.path[2].x + 8, vase.path[2].y - 6);
     ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(vase.path[1].x + 14, vase.path[1].y + 18);
+    ctx.lineTo(vase.path[2].x + 16, vase.path[2].y + 8);
+    ctx.stroke();
+
+    // liquid-cat face peeking when full (success meme)
+    if (phase === 'win') {
+      const fx = vase.cx, fy = vase.cy + 8 * vase.scale;
+      const s = 1.15 * vase.scale;
+      ctx.strokeStyle = INK;
+      ctx.lineWidth = 3.2 * s;
+      ctx.lineCap = 'round';
+      // > <
+      ctx.beginPath();
+      ctx.moveTo(fx - 16 * s, fy - 2 * s);
+      ctx.lineTo(fx - 8 * s, fy - 8 * s);
+      ctx.lineTo(fx - 16 * s, fy - 14 * s);
+      ctx.moveTo(fx + 16 * s, fy - 2 * s);
+      ctx.lineTo(fx + 8 * s, fy - 8 * s);
+      ctx.lineTo(fx + 16 * s, fy - 14 * s);
+      ctx.stroke();
+      // tiny o mouth
+      ctx.beginPath();
+      ctx.arc(fx, fy + 4 * s, 4.5 * s, 0, Math.PI * 2);
+      ctx.stroke();
+      // paws on glass
+      for (const side of [-1, 1]) {
+        ctx.beginPath();
+        ctx.ellipse(fx + side * 28 * s, fy + 28 * s, 9 * s, 7 * s, 0, 0, Math.PI * 2);
+        ctx.fillStyle = CAT_INNER;
+        ctx.fill();
+        ctx.strokeStyle = CAT_STROKE;
+        ctx.lineWidth = 2.5 * s;
+        ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 
@@ -899,75 +1048,123 @@
     }
   }
 
+  /**
+   * Procedural Vector Layers — no bitmaps.
+   * 1) Midpoint Bézier jelly body + radial gradient
+   * 2) Gloss highlights
+   * 3) World-up ears (−65° / −115°)
+   * 4) Kawaii face state machine + paws
+   */
   function drawCat() {
+    if (phase === 'win') return; // face lives inside the vase for the success meme
     const c = center();
-    // shadow
+
+    // soft contact shadow
     ctx.beginPath();
-    ctx.ellipse(c.x + 2, c.y + restR * 0.95, restR * 0.7, restR * 0.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x + 2, c.y + restR * 0.95, restR * 0.72, restR * 0.2, 0, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(74, 47, 106, 0.12)';
     ctx.fill();
 
-    // ears — world-up arcs from COM (never particle-bound triangles)
-    const earR = restR * 0.95;
-    function ear(side) {
-      const ang = -Math.PI / 2 + side * 0.38;
-      const bx = c.x + Math.cos(ang) * earR * 0.78;
-      const by = c.y + Math.sin(ang) * earR * 0.78;
-      const tipX = bx + side * restR * 0.06;
-      const tipY = by - restR * 0.38;
-      ctx.beginPath();
-      ctx.moveTo(bx - side * restR * 0.16, by + 2);
-      ctx.quadraticCurveTo(tipX - side * 4, tipY + 8, tipX, tipY);
-      ctx.quadraticCurveTo(tipX + side * 4, tipY + 8, bx + side * restR * 0.16, by + 2);
-      ctx.closePath();
-      ctx.fillStyle = catColor;
-      ctx.fill();
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 4;
-      ctx.lineJoin = 'round';
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.ellipse(lerp(bx, tipX, 0.45), lerp(by, tipY, 0.45), restR * 0.07, restR * 0.1, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 180, 200, 0.9)';
-      ctx.fill();
-    }
-    ear(-1); ear(1);
+    // --- Layer ③ upright ears FIRST (behind body rim slightly peeking) ---
+    drawUprightEars(c);
 
-    // body
+    // --- Layer ① jelly body ---
     ctx.beginPath();
     strokeBody();
-    const grad = ctx.createRadialGradient(c.x - restR * 0.3, c.y - restR * 0.35, 4, c.x, c.y, restR * 1.2);
-    grad.addColorStop(0, '#fff');
-    grad.addColorStop(0.15, catColor);
-    grad.addColorStop(1, shade(catColor, -25));
+    const gx = c.x - restR * 0.28;
+    const gy = c.y - restR * 0.32;
+    const grad = ctx.createRadialGradient(gx, gy, 3, c.x, c.y, restR * 1.25);
+    // keep dopamine peach for level-0; tint later colors via catColor mix
+    const inner = colorIdx === 0 ? CAT_INNER : shade(catColor, 40);
+    const outer = colorIdx === 0 ? CAT_OUTER : catColor;
+    const stroke = colorIdx === 0 ? CAT_STROKE : shade(catColor, -35);
+    grad.addColorStop(0, inner);
+    grad.addColorStop(0.55, outer);
+    grad.addColorStop(1, shade(outer, -18));
     ctx.fillStyle = grad;
     ctx.fill();
-    ctx.strokeStyle = INK;
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = 4;
     ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.stroke();
 
-    // jelly gloss
+    // --- Layer ② glossy jelly highlights ---
     ctx.beginPath();
-    ctx.ellipse(c.x - restR * 0.28, c.y - restR * 0.32, restR * 0.28, restR * 0.16, -0.5, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.ellipse(c.x - restR * 0.3, c.y - restR * 0.34, restR * 0.3, restR * 0.15, -0.55, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(c.x - restR * 0.08, c.y - restR * 0.22, restR * 0.055, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.fill();
 
-    // paws
-    for (const side of [-1, 1]) {
-      const px = c.x + side * restR * 0.55;
-      const py = c.y + restR * 0.45;
-      ctx.beginPath();
-      ctx.ellipse(px, py, restR * 0.16, restR * 0.13, 0, 0, Math.PI * 2);
-      ctx.fillStyle = catColor;
-      ctx.fill();
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 3.5;
-      ctx.stroke();
-    }
+    // paws (front)
+    drawPaws(c, stroke);
 
-    // face
+    // --- Layer ④ face state machine ---
     drawFace(c);
+  }
+
+  function drawUprightEars(c) {
+    // Fixed world-up angles: −115° (left) and −65° (right) — never particle-bound
+    const stroke = colorIdx === 0 ? CAT_STROKE : shade(catColor, -35);
+    const fill = colorIdx === 0 ? CAT_OUTER : catColor;
+    function ear(deg) {
+      const ang = deg * Math.PI / 180;
+      const r = surfaceRadius(c, ang) * 0.92;
+      const bx = c.x + Math.cos(ang) * r;
+      const by = c.y + Math.sin(ang) * r;
+      const tipLen = restR * 0.4;
+      // tip continues toward world up
+      const tipX = bx + Math.cos(ang) * tipLen * 0.15;
+      const tipY = by - tipLen;
+      const side = deg < -90 ? -1 : 1;
+      const half = restR * 0.18;
+      ctx.beginPath();
+      ctx.moveTo(bx - side * half * 0.2 - half * 0.55, by + 2);
+      ctx.quadraticCurveTo(tipX - side * 3, tipY + tipLen * 0.35, tipX, tipY);
+      ctx.quadraticCurveTo(tipX + side * 3, tipY + tipLen * 0.35, bx + side * half * 0.2 + half * 0.55, by + 2);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 3.5;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+      // inner ear
+      ctx.beginPath();
+      ctx.ellipse(
+        lerp(bx, tipX, 0.42),
+        lerp(by, tipY, 0.42),
+        restR * 0.07,
+        restR * 0.1,
+        0, 0, Math.PI * 2
+      );
+      ctx.fillStyle = 'rgba(255, 190, 205, 0.95)';
+      ctx.fill();
+    }
+    ear(-115);
+    ear(-65);
+  }
+
+  function drawPaws(c, stroke) {
+    const fill = colorIdx === 0 ? CAT_OUTER : catColor;
+    for (const side of [-1, 1]) {
+      const px = c.x + side * restR * 0.5;
+      const py = c.y + restR * 0.48;
+      ctx.beginPath();
+      ctx.ellipse(px, py, restR * 0.15, restR * 0.12, 0, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(px, py + restR * 0.02, restR * 0.07, restR * 0.05, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fill();
+    }
   }
 
   function shade(hex, amt) {
@@ -981,74 +1178,77 @@
     const s = restR / 42;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
+
+    // blush always (except splat extreme)
+    if (phase !== 'splat') {
+      ctx.fillStyle = 'rgba(255, 90, 120, 0.35)';
+      ctx.beginPath();
+      ctx.ellipse(c.x - 15 * s, c.y + 3 * s, 6 * s, 3.6 * s, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x + 15 * s, c.y + 3 * s, 6 * s, 3.6 * s, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
     if (phase === 'aim') {
-      // > < charge face
+      // charge > <
       ctx.strokeStyle = INK;
-      ctx.lineWidth = 3.2 * s;
+      ctx.lineWidth = 3.4 * s;
       ctx.beginPath();
-      ctx.moveTo(c.x - 14 * s, c.y - 4 * s);
-      ctx.lineTo(c.x - 6 * s, c.y - 10 * s);
-      ctx.lineTo(c.x - 14 * s, c.y - 16 * s);
-      ctx.moveTo(c.x + 14 * s, c.y - 4 * s);
-      ctx.lineTo(c.x + 6 * s, c.y - 10 * s);
-      ctx.lineTo(c.x + 14 * s, c.y - 16 * s);
+      ctx.moveTo(c.x - 13 * s, c.y - 2 * s);
+      ctx.lineTo(c.x - 6 * s, c.y - 9 * s);
+      ctx.lineTo(c.x - 13 * s, c.y - 16 * s);
+      ctx.moveTo(c.x + 13 * s, c.y - 2 * s);
+      ctx.lineTo(c.x + 6 * s, c.y - 9 * s);
+      ctx.lineTo(c.x + 13 * s, c.y - 16 * s);
       ctx.stroke();
-      // tiny x / v mouth
       ctx.beginPath();
-      ctx.moveTo(c.x - 4 * s, c.y + 4 * s);
-      ctx.lineTo(c.x, c.y + 8 * s);
-      ctx.lineTo(c.x + 4 * s, c.y + 4 * s);
+      ctx.moveTo(c.x - 4 * s, c.y + 5 * s);
+      ctx.lineTo(c.x, c.y + 9 * s);
+      ctx.lineTo(c.x + 4 * s, c.y + 5 * s);
       ctx.stroke();
     } else if (phase === 'fly') {
-      // big o mouth + round eyes
+      // round eyes + open o mouth
       ctx.fillStyle = INK;
       ctx.beginPath();
-      ctx.arc(c.x - 10 * s, c.y - 8 * s, 3.2 * s, 0, Math.PI * 2);
-      ctx.arc(c.x + 10 * s, c.y - 8 * s, 3.2 * s, 0, Math.PI * 2);
+      ctx.arc(c.x - 10 * s, c.y - 8 * s, 3.4 * s, 0, Math.PI * 2);
+      ctx.arc(c.x + 10 * s, c.y - 8 * s, 3.4 * s, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.arc(c.x, c.y + 6 * s, 5.5 * s, 0, Math.PI * 2);
+      ctx.arc(c.x, c.y + 6 * s, 5.2 * s, 0, Math.PI * 2);
       ctx.strokeStyle = INK;
       ctx.lineWidth = 3 * s;
       ctx.stroke();
     } else if (phase === 'splat') {
-      // sad arcs
       ctx.strokeStyle = INK;
       ctx.lineWidth = 3 * s;
       ctx.beginPath();
-      ctx.arc(c.x - 10 * s, c.y - 6 * s, 5 * s, 1.1, 2.2);
-      ctx.arc(c.x + 10 * s, c.y - 6 * s, 5 * s, 1.1, 2.2);
+      ctx.arc(c.x - 10 * s, c.y - 6 * s, 5 * s, 1.05, 2.15);
+      ctx.arc(c.x + 10 * s, c.y - 6 * s, 5 * s, 1.05, 2.15);
       ctx.stroke();
       ctx.beginPath();
       ctx.arc(c.x, c.y + 10 * s, 6 * s, 0.15 * Math.PI, 0.85 * Math.PI, true);
       ctx.stroke();
     } else {
-      // idle / win: glossy eyes + ω
+      // idle: glossy dots + ω  /  (win handled in vase)
       for (const side of [-1, 1]) {
         const ex = c.x + side * 11 * s;
         const ey = c.y - 8 * s;
         ctx.beginPath();
-        ctx.arc(ex, ey, 5.2 * s, 0, Math.PI * 2);
+        ctx.arc(ex, ey, 4.6 * s, 0, Math.PI * 2);
         ctx.fillStyle = INK;
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(ex - 1.5 * s, ey - 1.8 * s, 1.6 * s, 0, Math.PI * 2);
+        ctx.arc(ex + 1.4 * s, ey - 1.6 * s, 1.5 * s, 0, Math.PI * 2);
         ctx.fillStyle = '#fff';
         ctx.fill();
       }
+      // ω mouth
       ctx.beginPath();
-      ctx.strokeStyle = '#FF5277';
+      ctx.strokeStyle = CAT_STROKE;
       ctx.lineWidth = 2.2 * s;
       ctx.moveTo(c.x - 7 * s, c.y + 4 * s);
       ctx.quadraticCurveTo(c.x - 3.5 * s, c.y + 10 * s, c.x, c.y + 5 * s);
       ctx.quadraticCurveTo(c.x + 3.5 * s, c.y + 10 * s, c.x + 7 * s, c.y + 4 * s);
       ctx.stroke();
-      // blush
-      ctx.fillStyle = 'rgba(255, 140, 170, 0.45)';
-      ctx.beginPath();
-      ctx.ellipse(c.x - 16 * s, c.y + 2 * s, 5 * s, 3 * s, 0, 0, Math.PI * 2);
-      ctx.ellipse(c.x + 16 * s, c.y + 2 * s, 5 * s, 3 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
     }
   }
 
@@ -1058,6 +1258,7 @@
     ctx.save();
     ctx.translate(ox, oy);
     drawBackground();
+    drawWinRays();
     drawVase();
     drawTrajectory();
     drawSlingshot();
