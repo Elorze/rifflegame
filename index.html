@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Sling-Cat: Liquid Cannon</title>
 <style>
-html,body{margin:0;height:100%;overflow:hidden;background:#F4F0FF;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:#EDE8F8;touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
 </style>
 </head>
@@ -18,18 +18,55 @@ const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 const N = 16, PI2 = Math.PI * 2, H120 = 1 / 120, DAMP = 0.9996, K = 12.5;
 const cl = (v, a, b) => v < a ? a : v > b ? b : v;
 const rnd = (a, b) => a + Math.random() * (b - a);
-const MAC = ['#FF9EBB', '#9EE6CF', '#FFD58A', '#B9A6FF', '#8EC9FF', '#FFB3A7'];
+const ASSET = 'assets/game/';
+
+const IMG_KEYS = [
+  'chopsticks', 'bamboo_poles', 'sling_with_cat', 'pouch_launch', 'btn_launch',
+  'cat_idle', 'cat_happy', 'cat_fly', 'cat_ball', 'cat_squeeze1', 'cat_squeeze2', 'cat_chopstick_happy',
+  'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue',
+  'progress_bar', 'ui_full', 'ui_level', 'ui_tap_to_aim', 'ui_tap2', 'ui_try_again', 'ui_try_again2',
+  'star_pink', 'star_yellow', 'star_sm', 'paw1', 'paw2'
+];
+const imgs = {};
+let assetsReady = false, assetsFailed = 0;
+
+function loadAssets() {
+  let left = IMG_KEYS.length;
+  return Promise.all(IMG_KEYS.map(k => new Promise(res => {
+    const im = new Image();
+    im.onload = () => { imgs[k] = im; if (--left === 0) assetsReady = true; res(); };
+    im.onerror = () => { assetsFailed++; if (--left === 0) assetsReady = true; res(); };
+    im.src = ASSET + k + '.png';
+  })));
+}
+
+function drawImg(key, x, y, w, h, rot, alpha, pivotX, pivotY) {
+  const im = imgs[key];
+  if (!im || !im.complete || !im.naturalWidth) return false;
+  ctx.save();
+  if (alpha != null) ctx.globalAlpha = alpha;
+  ctx.translate(x, y);
+  if (rot) ctx.rotate(rot);
+  const px = pivotX == null ? 0.5 : pivotX, py = pivotY == null ? 0.5 : pivotY;
+  ctx.drawImage(im, -w * px, -h * py, w, h);
+  ctx.restore();
+  return true;
+}
 
 let W = 0, H = 0, u = 1, dpr = 1, bgGrad = null;
-let state = 'aim', stateT = 0, time = 0, shake = 0, score = 0, hintA = 1;
+let state = 'aim', stateT = 0, time = 0, shake = 0, score = 0, hintA = 1, level = 1;
 let dragging = false, flyT = 0, calmT = 0, impact = 0, thudCD = 0;
 const A = { x: 0, y: 0 }, pull = { x: 0, y: 0 };
-const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, rects: [] };
+const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, rects: [], kind: 'vase_teal' };
+const VASE_KINDS = ['vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue'];
 const px = new Float64Array(N + 1), py = new Float64Array(N + 1);
 const ox = new Float64Array(N + 1), oy = new Float64Array(N + 1);
 let R = 30, S = 1, stars = [], conf = [], amb = [];
+const burstEl = document.createElement('div');
+burstEl.id = 'burst';
+burstEl.style.display = 'none';
+document.body.appendChild(burstEl);
 
-// constraints: [i, j, rest (in R units), stiffness]
 const cons = [];
 for (let k = 0; k < N; k++) {
   const i = k + 1, j = (k + 1) % N + 1, j2 = (k + 2) % N + 1;
@@ -38,7 +75,7 @@ for (let k = 0; k < N; k++) {
   cons.push([i, j2, 2 * Math.sin(2 * Math.PI / N), 0.35]);
 }
 
-/* ---------------- Audio (procedural, zero assets) ---------------- */
+/* ---------------- Audio ---------------- */
 let ac = null, sOsc = null, sGain = null, nBuf = null;
 function unlock() {
   try {
@@ -111,13 +148,15 @@ function initCat() {
 }
 function placeVase() {
   V.hw = 52 * u; V.th = 6 * u;
-  V.t = H * rnd(0.22, 0.3); V.b = V.t + 135 * u;
+  V.t = H * rnd(0.20, 0.28); V.b = V.t + 148 * u;
   const m = V.hw + V.th + 10 * u;
-  V.x = rnd(Math.max(m, W * 0.3), Math.min(W - m, W * 0.7));
+  V.x = rnd(Math.max(m, W * 0.28), Math.min(W - m, W * 0.72));
+  V.kind = VASE_KINDS[(level - 1) % VASE_KINDS.length];
   const r = 4 * u, x0 = V.x - V.hw, x1 = V.x + V.hw;
+  // Side walls + floor only — open mouth gateway (no top rim collider)
   V.rects = [
-    [x0 - V.th - r, V.t - r, x0 + r, V.b + V.th + r],
-    [x1 - r, V.t - r, x1 + V.th + r, V.b + V.th + r],
+    [x0 - V.th - r, V.t + 8 * u, x0 + r, V.b + V.th + r],
+    [x1 - r, V.t + 8 * u, x1 + V.th + r, V.b + V.th + r],
     [x0 - V.th - r, V.b - r, x1 + V.th + r, V.b + V.th + r]
   ];
 }
@@ -131,12 +170,20 @@ function resize() {
   W = window.innerWidth; H = window.innerHeight;
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   u = cl(Math.min(W, H * 0.55) / 390, 0.55, 1.7);
-  A.x = W / 2; A.y = H * 0.8;
+  A.x = W * 0.38; A.y = H * 0.78;
   bgGrad = ctx.createLinearGradient(0, 0, 0, H);
-  bgGrad.addColorStop(0, '#F4F0FF'); bgGrad.addColorStop(1, '#FFE0EA');
+  bgGrad.addColorStop(0, '#EDE8F8');
+  bgGrad.addColorStop(0.55, '#F6EEF8');
+  bgGrad.addColorStop(1, '#FFE8F0');
   stars = []; amb = [];
-  for (let i = 0; i < 36; i++) stars.push({ x: rnd(0, W), y: rnd(0, H), r: rnd(2, 5) * u, ph: rnd(0, PI2) });
-  for (let i = 0; i < 20; i++) amb.push({ x: rnd(0, W), y: rnd(0, H), vy: rnd(8, 22) * u, rot: rnd(0, PI2), vr: rnd(-1, 1), size: rnd(5, 10) * u, color: MAC[i % 6], shape: i % 3 });
+  for (let i = 0; i < 28; i++) stars.push({
+    x: rnd(0, W), y: rnd(0, H), r: rnd(2.2, 5.5) * u, ph: rnd(0, PI2),
+    kind: i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow')
+  });
+  for (let i = 0; i < 18; i++) amb.push({
+    x: rnd(0, W), y: rnd(0, H), vy: rnd(10, 26) * u, rot: rnd(0, PI2), vr: rnd(-1.2, 1.2),
+    size: rnd(8, 14) * u, kind: i % 2 ? 'star_sm' : 'paw2'
+  });
   if (state === 'aim' || state === 'pull') { dragging = false; resetRound(true); }
   else placeVase();
 }
@@ -189,13 +236,12 @@ function step(h) {
   for (let i = 0; i <= N; i++) { vcx += px[i] - ox[i]; vcy += py[i] - oy[i]; }
   vcx /= N + 1; vcy /= N + 1;
   let fx = 0, fy = 0;
-  // Funnel / vortex attraction field around the vase mouth
   if (state === 'fly') {
     const tx = V.x, ty = V.t + 24 * u, dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), D = 1.3 * V.hw * 2;
     if (c.y < V.t + 10 * u && d < D && vcy / h > -80 * u) {
       const w = 1 - d / D, f = 3400 * u * w * w;
       fx += dx / (d || 1) * f; fy += dy / (d || 1) * f;
-      fx += -dy / (d || 1) * f * 0.15; // slight swirl
+      fx += -dy / (d || 1) * f * 0.15;
     } else if (Math.abs(c.x - V.x) < V.hw && c.y > V.t && c.y < V.b) {
       fx += (V.x - c.x) * 18;
     }
@@ -211,7 +257,7 @@ function step(h) {
     px[0] += (t.x - px[0]) * 0.4; py[0] += (t.y - py[0]) * 0.4;
     ox[0] = px[0]; oy[0] = py[0];
   }
-  if (state === 'win') S += ((V.hw * 0.9) / R - S) * Math.min(1, h * 9);
+  if (state === 'win') S += ((V.hw * 0.85) / R - S) * Math.min(1, h * 9);
   const rs = R * S, tgt = 0.5 * N * Math.sin(PI2 / N) * rs * rs;
   for (let it = 0; it < 4; it++) {
     for (const [i, j, rest, k] of cons) {
@@ -222,7 +268,6 @@ function step(h) {
       px[i] += dx * diff * wi / sw; py[i] += dy * diff * wi / sw;
       px[j] -= dx * diff * wj / sw; py[j] -= dy * diff * wj / sw;
     }
-    // Area preservation (shoelace) along surface normals
     const a = area();
     if (a > 0 && a < tgt) {
       const dd = (tgt - a) / (N * 2 * rs * Math.sin(Math.PI / N)) * 0.5;
@@ -234,7 +279,6 @@ function step(h) {
     }
   }
   collide();
-  // damp internal jiggle modes (keeps jelly wobble from ringing forever)
   let ax = 0, ay = 0;
   for (let i = 0; i <= N; i++) { ax += px[i] - ox[i]; ay += py[i] - oy[i]; }
   ax /= N + 1; ay /= N + 1;
@@ -257,11 +301,18 @@ function inVase() {
     if (px[i] > V.x - V.hw && px[i] < V.x + V.hw && py[i] > V.t && py[i] < V.b) n++;
   return n;
 }
+function fillRatio() { return inVase() / (N + 1); }
 function win() {
   state = 'win'; stateT = 0; score++; shake = 1;
   winSound();
-  for (let i = 0; i < 90; i++)
-    conf.push({ x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-420, 420) * u, vy: -rnd(300, 900) * u, rot: rnd(0, PI2), vr: rnd(-8, 8), size: rnd(7, 14) * u, color: MAC[i % 6], shape: i % 3, life: 1 });
+  burstEl.classList.add('show');
+  setTimeout(() => burstEl.classList.remove('show'), 2000);
+  for (let i = 0; i < 70; i++)
+    conf.push({
+      x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-420, 420) * u, vy: -rnd(300, 900) * u,
+      rot: rnd(0, PI2), vr: rnd(-8, 8), size: rnd(10, 18) * u,
+      kind: i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow'), life: 1
+    });
 }
 function update(dt) {
   stateT += dt; thudCD -= dt;
@@ -280,157 +331,109 @@ function update(dt) {
     const c = com(), sp = Math.hypot(px[0] - ox[0], py[0] - oy[0]) / H120;
     calmT = (sp < 60 * u && c.y > H * 0.8) ? calmT + dt : 0;
     if (calmT > 0.9 || flyT > 7) resetRound(false);
-  } else if (state === 'win' && stateT > 2.5) resetRound(true);
+  } else if (state === 'win' && stateT > 2.5) {
+    level++;
+    resetRound(true);
+  }
 }
 
 /* ---------------- Rendering ---------------- */
-function starP(x, y, r, rot) {
-  ctx.beginPath();
-  for (let i = 0; i < 10; i++) {
-    const a = rot + i * Math.PI / 5 - Math.PI / 2, d = i % 2 ? r * 0.45 : r;
-    ctx.lineTo(x + Math.cos(a) * d, y + Math.sin(a) * d);
-  }
-  ctx.closePath();
-}
-function piece(p, alpha) {
-  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
-  ctx.globalAlpha = alpha; ctx.fillStyle = p.color;
-  if (p.shape === 0) { starP(0, 0, p.size, 0); ctx.fill(); }
-  else if (p.shape === 1) { ctx.beginPath(); ctx.ellipse(0, 0, p.size * 0.5, p.size * 0.9, 0, 0, PI2); ctx.fill(); }
-  else ctx.fillRect(-p.size / 2, -p.size * 0.35, p.size, p.size * 0.7);
-  ctx.restore();
-}
 function drawBg() {
   ctx.fillStyle = bgGrad; ctx.fillRect(0, 0, W, H);
   for (const s of stars) {
-    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(time * 1.6 + s.ph);
-    ctx.fillStyle = '#FFFFFF'; starP(s.x, s.y, s.r, 0); ctx.fill();
-  }
-  for (const p of amb) piece(p, 0.45);
-  ctx.globalAlpha = 1;
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.beginPath(); ctx.ellipse(W / 2, H + 40 * u, W * 0.8, 90 * u, 0, 0, PI2); ctx.fill();
-}
-function vasePath() {
-  const x0 = V.x - V.hw, x1 = V.x + V.hw, r = 14 * u;
-  ctx.beginPath(); ctx.moveTo(x0, V.t); ctx.lineTo(x0, V.b - r);
-  ctx.quadraticCurveTo(x0, V.b, x0 + r, V.b); ctx.lineTo(x1 - r, V.b);
-  ctx.quadraticCurveTo(x1, V.b, x1, V.b - r); ctx.lineTo(x1, V.t);
-}
-function vaseBack() {
-  ctx.save();
-  ctx.shadowColor = 'rgba(70,160,140,0.35)'; ctx.shadowBlur = 24 * u; ctx.shadowOffsetY = 14 * u;
-  ctx.fillStyle = 'rgba(112,214,188,0.25)';
-  ctx.beginPath(); ctx.ellipse(V.x, V.b + 6 * u, V.hw * 0.9, 9 * u, 0, 0, PI2); ctx.fill();
-  ctx.restore();
-  ctx.fillStyle = 'rgba(112,214,188,0.2)';
-  ctx.beginPath(); ctx.ellipse(V.x, V.t, V.hw, 10 * u, 0, 0, PI2); ctx.fill();
-  ctx.strokeStyle = '#70D6BC'; ctx.lineWidth = 6 * u;
-  ctx.beginPath(); ctx.ellipse(V.x, V.t, V.hw + 3 * u, 10 * u, 0, Math.PI, PI2); ctx.stroke();
-}
-function vaseFront() {
-  vasePath();
-  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.fill();
-  ctx.strokeStyle = '#70D6BC'; ctx.lineWidth = 6 * u; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(V.x, V.t, V.hw + 3 * u, 10 * u, 0, 0, Math.PI); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 3 * u;
-  ctx.beginPath(); ctx.ellipse(V.x, V.t, V.hw - 2 * u, 7 * u, 0, Math.PI * 0.08, Math.PI * 0.45); ctx.stroke();
-  ctx.lineWidth = 5 * u; ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-  ctx.beginPath(); ctx.moveTo(V.x - V.hw + 12 * u, V.t + 26 * u); ctx.lineTo(V.x - V.hw + 12 * u, V.b - 34 * u); ctx.stroke();
-  ctx.lineWidth = 3 * u;
-  ctx.beginPath(); ctx.moveTo(V.x - V.hw + 12 * u, V.b - 22 * u); ctx.lineTo(V.x - V.hw + 12 * u, V.b - 18 * u); ctx.stroke();
-}
-function fork() {
-  const x = A.x, y = A.y;
-  const path = (dx) => {
-    ctx.beginPath();
-    ctx.moveTo(x + dx, y + 125 * u); ctx.lineTo(x + dx, y + 50 * u);
-    ctx.moveTo(x + dx, y + 54 * u); ctx.lineTo(x + dx - 40 * u, y - 14 * u);
-    ctx.moveTo(x + dx, y + 54 * u); ctx.lineTo(x + dx + 40 * u, y - 14 * u);
-  };
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#9A6238'; ctx.lineWidth = 18 * u; path(0); ctx.stroke();
-  ctx.strokeStyle = '#C98D57'; ctx.lineWidth = 11 * u; path(0); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 3 * u; path(-2 * u); ctx.stroke();
-}
-function band(c, rr, side, t) {
-  ctx.strokeStyle = '#8E6BFF'; ctx.lineWidth = (8 - 3 * t) * u; ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(A.x + side * 40 * u, A.y - 14 * u);
-  ctx.lineTo(c.x + side * rr * 0.75, c.y + rr * 0.1); ctx.stroke();
-}
-function ear(c, rr, ang, inner) {
-  const dx = Math.cos(ang), dy = Math.sin(ang), nx = -dy, ny = dx;
-  const bd = inner ? 0.85 : 0.72, hw = rr * (inner ? 0.2 : 0.38), td = rr * (inner ? 1.3 : 1.5);
-  const bx = c.x + dx * rr * bd, by = c.y + dy * rr * bd, tx = c.x + dx * td, ty = c.y + dy * td;
-  const L = td - rr * bd;
-  ctx.beginPath();
-  ctx.moveTo(bx - nx * hw, by - ny * hw);
-  ctx.bezierCurveTo(bx - nx * hw + dx * L * 0.75, by - ny * hw + dy * L * 0.75, tx - nx * hw * 0.5, ty - ny * hw * 0.5, tx, ty);
-  ctx.bezierCurveTo(tx + nx * hw * 0.5, ty + ny * hw * 0.5, bx + nx * hw + dx * L * 0.75, by + ny * hw + dy * L * 0.75, bx + nx * hw, by + ny * hw);
-  ctx.closePath();
-  ctx.fillStyle = inner ? '#FFC9D6' : '#FF7A97'; ctx.fill();
-  if (!inner) { ctx.strokeStyle = '#E04868'; ctx.lineWidth = 4 * u; ctx.lineJoin = 'round'; ctx.stroke(); }
-}
-function face(k, mode) {
-  const dark = '#3A2340', mouth = '#7A2E45';
-  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  ctx.fillStyle = 'rgba(255,100,140,0.45)';
-  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * 0.62 * k, 0.2 * k, 0.13 * k, 0.08 * k, 0, 0, PI2); ctx.fill(); }
-  ctx.strokeStyle = dark; ctx.lineWidth = 0.065 * k;
-  for (const s of [-1, 1]) {
-    const ex = s * 0.36 * k;
-    if (mode === 'pull') {
-      ctx.beginPath(); ctx.moveTo(ex - s * 0.14 * k, -0.14 * k); ctx.lineTo(ex + s * 0.1 * k, -0.02 * k); ctx.lineTo(ex - s * 0.14 * k, 0.1 * k); ctx.stroke();
-    } else if (mode === 'win') {
-      ctx.beginPath(); ctx.arc(ex, 0.03 * k, 0.12 * k, Math.PI, PI2); ctx.stroke();
-    } else {
-      const big = mode === 'fly' ? 1.15 : 1;
-      ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(ex, -0.02 * k, 0.12 * k * big, 0.15 * k * big, 0, 0, PI2); ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.beginPath(); ctx.arc(ex - 0.035 * k, -0.07 * k, 0.05 * k, 0, PI2); ctx.fill();
-      ctx.beginPath(); ctx.arc(ex + 0.04 * k, 0.03 * k, 0.025 * k, 0, PI2); ctx.fill();
+    const a = 0.25 + 0.35 * Math.sin(time * 1.6 + s.ph);
+    if (!drawImg(s.kind, s.x, s.y, s.r * 2.4, s.r * 2.4, s.ph * 0.2, a)) {
+      ctx.globalAlpha = a; ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, PI2); ctx.fill(); ctx.globalAlpha = 1;
     }
   }
-  ctx.strokeStyle = mouth; ctx.fillStyle = mouth; ctx.lineWidth = 0.04 * k;
-  if (mode === 'fly') { ctx.beginPath(); ctx.ellipse(0, 0.32 * k, 0.07 * k, 0.1 * k, 0, 0, PI2); ctx.fill(); }
-  else if (mode === 'win') {
-    ctx.beginPath(); ctx.arc(0, 0.22 * k, 0.13 * k, 0, Math.PI); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#FF8FA8'; ctx.beginPath(); ctx.ellipse(0, 0.35 * k, 0.06 * k, 0.04 * k, 0, 0, PI2); ctx.fill();
-  } else {
-    ctx.beginPath(); ctx.arc(-0.06 * k, 0.24 * k, 0.06 * k, 0, Math.PI); ctx.stroke();
-    ctx.beginPath(); ctx.arc(0.06 * k, 0.24 * k, 0.06 * k, 0, Math.PI); ctx.stroke();
+  for (const p of amb) {
+    if (!drawImg(p.kind, p.x, p.y, p.size, p.size, p.rot, 0.4)) {
+      ctx.globalAlpha = 0.35; ctx.fillStyle = '#D8C8F0';
+      ctx.fillRect(p.x - p.size * 0.3, p.y - p.size * 0.3, p.size * 0.6, p.size * 0.6);
+      ctx.globalAlpha = 1;
+    }
   }
-  ctx.fillStyle = '#FFD0DB'; ctx.strokeStyle = '#E04868'; ctx.lineWidth = 0.035 * k;
-  for (const s of [-1, 1]) { ctx.beginPath(); ctx.ellipse(s * 0.38 * k, 0.76 * k, 0.17 * k, 0.11 * k, 0, 0, PI2); ctx.fill(); ctx.stroke(); }
 }
-function drawCat(c, rr) {
-  const pt = state === 'pull' ? Math.min(1, Math.hypot(pull.x - A.x, pull.y - A.y) / (120 * u)) : 0;
-  const mode = state === 'pull' ? 'pull' : state === 'fly' ? 'fly' : state === 'win' ? 'win' : 'idle';
+
+function drawChopsticksFork() {
+  // Bamboo chopsticks as the slingshot frame (user art)
+  const tipX = A.x + 28 * u, tipY = A.y - 18 * u;
+  const w = 210 * u, h = w * (288 / 605);
+  // Asset points down-right; rotate so tips face up-right toward the vase
+  const rot = -0.95;
+  drawImg('chopsticks', tipX, tipY + 40 * u, w, h, rot, 1, 0.15, 0.55);
+}
+
+function drawBand(c, rr, t) {
+  // Elastic loop between chopsticks tip and cat
+  const ax = A.x + 36 * u, ay = A.y - 22 * u;
+  const bx = c.x, by = c.y + rr * 0.15;
+  const mx = (ax + bx) / 2, my = (ay + by) / 2;
+  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+  const ang = Math.atan2(dy, dx);
+  const bw = Math.max(70 * u, len * 1.05), bh = (22 - 6 * t) * u;
+  if (!drawImg('bamboo_poles', mx, my, bw, bh, ang, 0.95)) {
+    ctx.strokeStyle = '#C9A07A'; ctx.lineWidth = (8 - 3 * t) * u; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx - rr * 0.5, by); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax + 18 * u, ay + 10 * u); ctx.lineTo(bx + rr * 0.5, by); ctx.stroke();
+  }
+}
+
+function drawVase() {
+  const vh = (V.b - V.t) * 1.18;
+  const vw = vh * 0.72;
+  const cy = (V.t + V.b) / 2 + 4 * u;
+  const key = V.kind || 'vase_teal';
+  if (!drawImg(key, V.x, cy, vw, vh, 0, 1)) {
+    ctx.fillStyle = 'rgba(112,214,188,0.35)';
+    ctx.strokeStyle = '#70D6BC'; ctx.lineWidth = 6 * u;
+    ctx.beginPath();
+    ctx.moveTo(V.x - V.hw, V.t);
+    ctx.lineTo(V.x - V.hw, V.b);
+    ctx.lineTo(V.x + V.hw, V.b);
+    ctx.lineTo(V.x + V.hw, V.t);
+    ctx.stroke();
+  }
+  // Soft mouth highlight so entry reads clearly
   ctx.save();
-  if (pt > 0) {
-    const a = Math.atan2(A.y - pull.y, A.x - pull.x);
-    ctx.translate(c.x, c.y); ctx.rotate(a); ctx.scale(1 + 0.3 * pt, 1 - 0.2 * pt); ctx.rotate(-a); ctx.translate(-c.x, -c.y);
-  }
-  ear(c, rr, -65 * Math.PI / 180, false); ear(c, rr, -115 * Math.PI / 180, false);
-  ear(c, rr, -65 * Math.PI / 180, true); ear(c, rr, -115 * Math.PI / 180, true);
-  const P = k => ({ x: px[(k + N) % N + 1], y: py[(k + N) % N + 1] });
-  const m0 = { x: (P(N - 1).x + P(0).x) / 2, y: (P(N - 1).y + P(0).y) / 2 };
-  ctx.beginPath(); ctx.moveTo(m0.x, m0.y);
-  for (let k = 0; k < N; k++) {
-    const p = P(k), q = P(k + 1);
-    ctx.quadraticCurveTo(p.x, p.y, (p.x + q.x) / 2, (p.y + q.y) / 2);
-  }
-  ctx.closePath();
-  const gr = ctx.createRadialGradient(c.x - rr * 0.3, c.y - rr * 0.35, rr * 0.1, c.x, c.y, rr * 1.2);
-  gr.addColorStop(0, '#FFA8BA'); gr.addColorStop(1, '#FF6584');
-  ctx.fillStyle = gr; ctx.fill();
-  ctx.strokeStyle = '#E04868'; ctx.lineWidth = 4 * u; ctx.lineJoin = 'round'; ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.45)';
-  ctx.beginPath(); ctx.ellipse(c.x - rr * 0.42, c.y - rr * 0.5, rr * 0.3, rr * 0.17, -0.6, 0, PI2); ctx.fill();
-  ctx.translate(c.x, c.y + rr * 0.08); ctx.rotate(cl((px[0] - ox[0]) / H120 / 4000, -0.2, 0.2));
-  face(rr, mode);
+  ctx.globalAlpha = 0.35;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.ellipse(V.x, V.t + 4 * u, V.hw * 0.85, 9 * u, 0, 0, PI2); ctx.fill();
   ctx.restore();
 }
+
+function catSpriteKey() {
+  if (state === 'win') return 'cat_happy';
+  if (state === 'fly') return flyT < 0.28 ? 'cat_fly' : 'cat_ball';
+  if (state === 'pull') return 'cat_fly';
+  return 'cat_idle';
+}
+
+function drawCat(c, rr) {
+  const pt = state === 'pull' ? Math.min(1, Math.hypot(pull.x - A.x, pull.y - A.y) / (120 * u)) : 0;
+  const key = catSpriteKey();
+
+  let rot = 0;
+  if (state === 'pull') rot = Math.atan2(A.y - pull.y, A.x - pull.x) - Math.PI / 2;
+  else if (state === 'fly') rot = cl((px[0] - ox[0]) / H120 / 3500, -0.45, 0.45);
+  else if (state === 'aim') rot = Math.sin(time * 2.2) * 0.04;
+
+  const stretch = state === 'pull' ? 1 + 0.28 * pt : (state === 'fly' ? 1.06 : 1);
+  const squash = state === 'pull' ? 1 - 0.2 * pt : (state === 'win' ? 0.92 : 1);
+  const size = rr * 2.55 * (state === 'win' ? S * 1.05 : 1);
+  const w = size * stretch, h = size * squash;
+
+  ctx.save();
+  ctx.translate(c.x, c.y + (state === 'aim' ? Math.sin(time * 2.2) * 2 * u : 0));
+  ctx.rotate(rot);
+  if (!drawImg(key, 0, 0, w, h, 0, 1)) {
+    ctx.fillStyle = '#FF7A97';
+    ctx.beginPath(); ctx.ellipse(0, 0, rr, rr * 0.95, 0, 0, PI2); ctx.fill();
+  }
+  ctx.restore();
+}
+
 function trajectory() {
   let x = pull.x, y = pull.y, vx = (A.x - pull.x) * K, vy = (A.y - pull.y) * K;
   const h = 1 / 60, g = 1150 * u, d = Math.pow(DAMP, 2);
@@ -438,60 +441,104 @@ function trajectory() {
     vy += g * h; vx *= d; vy *= d; x += vx * h; y += vy * h;
     if (y > H || x < 0 || x > W) break;
     if (k % 2 === 0 && k > 2) {
-      ctx.fillStyle = 'hsl(' + (k * 9 % 360) + ',90%,62%)';
-      ctx.beginPath(); ctx.arc(x, y, (4.5 - k / 40) * u, 0, PI2); ctx.fill();
+      const sz = (5.2 - k / 38) * u;
+      if (!drawImg('star_sm', x, y, sz * 2, sz * 2, 0, 0.85)) {
+        ctx.fillStyle = 'rgba(160,120,220,0.75)';
+        ctx.beginPath(); ctx.arc(x, y, sz * 0.7, 0, PI2); ctx.fill();
+      }
     }
   }
 }
-function easeOutBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
-function bigText(txt, y, size, sc, alpha, glow) {
-  ctx.save(); ctx.translate(W / 2, y); ctx.scale(sc, sc); ctx.globalAlpha = alpha;
-  ctx.font = '900 ' + size + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",Nunito,system-ui,sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-  const gr = ctx.createLinearGradient(0, -size / 2, 0, size / 2);
-  gr.addColorStop(0, '#FFF6B0'); gr.addColorStop(1, '#FFC400');
-  ctx.shadowColor = glow; ctx.shadowBlur = 26 * u;
-  ctx.lineWidth = size * 0.12; ctx.strokeStyle = '#FF9F1C'; ctx.strokeText(txt, 0, 0);
-  ctx.shadowBlur = 0; ctx.fillStyle = gr; ctx.fillText(txt, 0, 0);
-  ctx.restore();
+
+function drawHUD() {
+  const barW = Math.min(W * 0.72, 320 * u), barH = barW * (100 / 691);
+  const bx = W / 2, by = 28 * u + barH / 2;
+  drawImg('progress_bar', bx, by, barW, barH, 0, 1);
+
+  // Fill readout uses score streak as "fullness" pulse on win
+  const fill = state === 'win' ? 1 : (state === 'fly' ? Math.min(1, fillRatio()) : 0);
+  if (fill > 0.02) {
+    ctx.save();
+    const fw = barW * 0.86 * fill, fh = barH * 0.42;
+    const rx = bx - barW * 0.43, ry = by - fh / 2;
+    ctx.beginPath();
+    ctx.moveTo(rx + fh / 2, ry);
+    ctx.lineTo(rx + fw - fh / 2, ry);
+    ctx.arc(rx + fw - fh / 2, ry + fh / 2, fh / 2, -Math.PI / 2, Math.PI / 2);
+    ctx.lineTo(rx + fh / 2, ry + fh);
+    ctx.arc(rx + fh / 2, ry + fh / 2, fh / 2, Math.PI / 2, -Math.PI / 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = 'rgba(255,120,170,0.35)';
+    ctx.fillRect(bx - barW / 2, by - barH / 2, barW, barH);
+    ctx.restore();
+  }
+
+  const lvW = 78 * u, lvH = lvW * (89 / 167);
+  drawImg('ui_level', 18 * u + lvW / 2, by, lvW, lvH, 0, 1);
+  ctx.font = '800 ' + 13 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#4A3B6B';
+  ctx.fillText(String(level).padStart(2, '0'), 18 * u + lvW * 0.55, by + 1 * u);
+
+  ctx.textAlign = 'right';
+  ctx.fillText(Math.round(fill * 100) + '% FULL', W - 18 * u, by);
+
+  if (hintA > 0.01 && state === 'aim') {
+    if (hintA < 1) hintA -= 0.015;
+    const pulse = 0.75 + 0.25 * Math.sin(time * 3);
+    const tw = 150 * u, th = tw * (79 / 166);
+    drawImg('ui_tap_to_aim', W / 2, H * 0.38, tw, th, 0, hintA * pulse);
+  }
+
+  if (state === 'aim' || state === 'pull') {
+    const bw = 150 * u, bh = bw * (262 / 528);
+    drawImg('pouch_launch', W / 2, H - 28 * u - bh / 2, bw, bh, 0, state === 'pull' ? 0.55 : 0.9);
+  }
+
+  if (state === 'win') {
+    const sc = Math.min(1, stateT / 0.35);
+    const al = stateT > 2.1 ? Math.max(0, 1 - (stateT - 2.1) / 0.4) : 1;
+    const fw = 200 * u * (0.85 + 0.15 * sc), fh = fw * (87 / 278);
+    drawImg('ui_full', W / 2, H * 0.48, fw, fh, 0, al);
+    if (imgs.cat_chopstick_happy) {
+      drawImg('cat_chopstick_happy', W / 2, H * 0.62, 160 * u * sc, 90 * u * sc, 0, al * 0.95);
+    }
+  }
+
+  if (state === 'fly' && calmT > 0.35) {
+    const tw = 140 * u, th = tw * (85 / 161);
+    drawImg('ui_try_again', W / 2, H * 0.42, tw, th, 0, Math.min(1, calmT));
+  }
 }
+
 function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.globalAlpha = 1;
   drawBg();
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-1, 1) * 10 * u * shake, rnd(-1, 1) * 10 * u * shake);
-  vaseBack();
-  fork();
+
+  drawChopsticksFork();
+
   const c = com();
   let rr = 0;
   for (let k = 1; k <= N; k++) rr += Math.hypot(px[k] - c.x, py[k] - c.y);
   rr /= N;
   const t = state === 'pull' ? Math.min(1, Math.hypot(pull.x - A.x, pull.y - A.y) / (120 * u)) : 0;
-  if (state === 'aim' || state === 'pull') { band(c, rr, -1, t); band(c, rr, 1, t); }
+
+  if (state === 'aim' || state === 'pull') drawBand(c, rr, t);
   if (state === 'pull') trajectory();
-  drawCat(c, rr);
-  vaseFront();
+
+  // Cat behind vase rim when entering / inside
+  const insideish = c.y > V.t - 8 * u && Math.abs(c.x - V.x) < V.hw * 1.2;
+  if (!insideish) drawCat(c, rr);
+  drawVase();
+  if (insideish) drawCat(c, rr);
+
   ctx.restore();
-  for (const p of conf) piece(p, 1);
+  for (const p of conf) drawImg(p.kind, p.x, p.y, p.size, p.size, p.rot, 1);
   ctx.globalAlpha = 1;
-  if (state === 'win') {
-    const sc = easeOutBack(Math.min(1, stateT / 0.45)), al = stateT > 2.1 ? Math.max(0, 1 - (stateT - 2.1) / 0.4) : 1;
-    const fs = Math.min(64 * u, W * 0.14);
-    bigText('SWISH! \u{1F43E}', H * 0.5, fs, sc, al, '#FFD84D');
-    bigText('100% FULL', H * 0.5 + fs * 0.95, fs * 0.5, sc, al, '#FFB347');
-  }
-  ctx.font = '800 ' + 15 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
-  ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#7A5AF8';
-  ctx.fillText('SWISH \u00D7 ' + score, 16 * u, 14 * u);
-  if (hintA > 0.01 && state !== 'win') {
-    if (hintA < 1) hintA -= 0.02;
-    ctx.globalAlpha = hintA * (0.6 + 0.3 * Math.sin(time * 3));
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#7A5AF8';
-    ctx.font = '800 ' + 17 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
-    ctx.fillText('Drag the cat back, then let go', W / 2, Math.min(H - 16 * u, A.y + 150 * u));
-    ctx.globalAlpha = 1;
-  }
+  drawHUD();
 }
 
 /* ---------------- Input ---------------- */
@@ -508,7 +555,8 @@ cv.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (state !== 'aim') return;
   const p = pt(e);
-  if (p.y < H * 0.45) return;
+  // Allow aiming from lower half OR tapping near the launch pouch
+  if (p.y < H * 0.42 && Math.hypot(p.x - W / 2, p.y - (H - 50 * u)) > 90 * u) return;
   dragging = true;
   try { cv.setPointerCapture(e.pointerId); } catch (_) {}
   state = 'pull'; setPull(p); startStretch();
@@ -527,6 +575,45 @@ document.addEventListener('contextmenu', e => e.preventDefault());
 window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 
+/* ---------------- Debug / e2e API ---------------- */
+function mapPhase() {
+  if (state === 'aim') return 'idle';
+  if (state === 'pull') return 'aim';
+  return state;
+}
+function placeCatInVase() {
+  const cx = V.x, cy = (V.t + V.b) / 2;
+  R = Math.min(R, V.hw * 0.7);
+  px[0] = cx; py[0] = cy;
+  for (let k = 0; k < N; k++) {
+    const a = k / N * PI2;
+    px[k + 1] = cx + Math.cos(a) * R * 0.85;
+    py[k + 1] = cy + Math.sin(a) * R * 0.85;
+  }
+  for (let i = 0; i <= N; i++) { ox[i] = px[i]; oy[i] = py[i]; }
+  state = 'fly'; stateT = 0; flyT = 0.2; calmT = 0;
+}
+function launchTowardVase() {
+  const c = com();
+  pull.x = A.x - (V.x - A.x) * 0.35;
+  pull.y = A.y + 70 * u;
+  setPull(pull);
+  launch();
+}
+
+window.__sling = { st: () => state, V, A, score: () => score, getU: () => u };
+window.__slingCat = {
+  version: 'sling1',
+  getPhase: mapPhase,
+  getFillRatio: () => (state === 'win' ? 1 : fillRatio()),
+  getFill: () => Math.round((state === 'win' ? 1 : fillRatio()) * 100),
+  getCenter: () => com(),
+  pointInVase: (x, y) => x > V.x - V.hw && x < V.x + V.hw && y > V.t && y < V.b,
+  debugPlaceCatInVase: placeCatInVase,
+  debugLaunchTowardVase: launchTowardVase
+};
+window.__liquidCat = { getParticleCount: () => conf.length };
+
 /* ---------------- Main loop ---------------- */
 let last = 0, acc = 0;
 function frame(ts) {
@@ -536,10 +623,12 @@ function frame(ts) {
   update(dt); draw();
   requestAnimationFrame(frame);
 }
-window.__sling = { st: () => state, V, A, score: () => score, getU: () => u };
-resize();
-resetRound(true);
-requestAnimationFrame(frame);
+
+loadAssets().then(() => {
+  resize();
+  resetRound(true);
+  requestAnimationFrame(frame);
+});
 })();
 </script>
 </body>
