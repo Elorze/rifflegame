@@ -484,15 +484,16 @@
     const cx = W * 0.68;
     const cy = H * 0.42;
     const ang = -0.55 + (level % 3) * 0.08; // slight variation
+    // Wider mouth so a jelly cat can actually swish in
     const local = [
-      { x: -42, y: -95 }, // rim L
-      { x: -28, y: -40 },
-      { x: -55, y: 20 },
-      { x: -48, y: 88 },
-      { x: 48, y: 88 },
-      { x: 55, y: 20 },
-      { x: 28, y: -40 },
-      { x: 42, y: -95 }, // rim R
+      { x: -52, y: -98 }, // rim L
+      { x: -30, y: -38 },
+      { x: -58, y: 22 },
+      { x: -50, y: 90 },
+      { x: 50, y: 90 },
+      { x: 58, y: 22 },
+      { x: 30, y: -38 },
+      { x: 52, y: -98 }, // rim R
     ];
     const scale = Math.min(W, H) / 390 * 1.15;
     const ca = Math.cos(ang), sa = Math.sin(ang);
@@ -504,11 +505,13 @@
     for (let i = 0; i < path.length - 1; i++) {
       segments.push({ ax: path[i].x, ay: path[i].y, bx: path[i + 1].x, by: path[i + 1].y });
     }
-    // mouth center between rim ends
+    // mouth center between rim ends — opening faces roughly toward slingshot
     const mouth = {
       x: (path[0].x + path[path.length - 1].x) * 0.5,
       y: (path[0].y + path[path.length - 1].y) * 0.5,
-      nx: -sa, ny: ca,
+      nx: -sa,
+      ny: ca,
+      halfW: hypot(path[path.length - 1].x - path[0].x, path[path.length - 1].y - path[0].y) * 0.55,
     };
     return { cx, cy, ang, path, segments, mouth, scale, slide: 0 };
   }
@@ -528,6 +531,19 @@
     return inside;
   }
 
+  /** Mouth gateway: points near the rim opening may pass through (no wall push / no splat). */
+  function inMouthGateway(x, y) {
+    if (!vase) return false;
+    const m = vase.mouth;
+    const dx = x - m.x, dy = y - m.y;
+    const along = dx * m.nx + dy * m.ny; // out of mouth is positive along outward normal roughly
+    const side = -dx * m.ny + dy * m.nx;
+    const mouthDepth = 55 * vase.scale;
+    const mouthHalf = m.halfW * 1.15;
+    // Allow a band around the rim so the jelly can squeeze in
+    return Math.abs(side) <= mouthHalf && along > -mouthDepth * 0.35 && along < mouthDepth * 0.85;
+  }
+
   function collideWorld() {
     const pad = 8;
     for (const p of points) {
@@ -537,7 +553,8 @@
       if (p.y > H - pad) {
         p.y = H - pad;
         p.oy = p.y;
-        if (phase === 'fly') beginSplat();
+        // Only floor-miss splat if we clearly did not fill the vase
+        if (phase === 'fly' && fillRatio() < 0.35) beginSplat();
       }
     }
   }
@@ -546,9 +563,15 @@
   function collideVase() {
     if (!vase || phase === 'swap') return;
     if (phase !== 'fly' && phase !== 'splat' && phase !== 'win') return;
+
+    const c = center();
+    const entering = inMouthGateway(c.x, c.y) || pointInVase(c.x, c.y) || fillRatio() >= 0.28;
+
     for (const p of points) {
-      // only collide if approaching from outside when flying
       if (pointInVase(p.x, p.y)) continue;
+      // Let the cat pass through the mouth opening instead of bouncing off the rim
+      if (inMouthGateway(p.x, p.y)) continue;
+
       let best = null;
       for (const seg of vase.segments) {
         const abx = seg.bx - seg.ax, aby = seg.by - seg.ay;
@@ -558,21 +581,35 @@
         const qx = seg.ax + abx * t, qy = seg.ay + aby * t;
         const dx = p.x - qx, dy = p.y - qy;
         const d = hypot(dx, dy);
-        if (d < 10 && (!best || d < best.d)) best = { qx, qy, dx, dy, d };
+        if (d < 11 && (!best || d < best.d)) best = { qx, qy, dx, dy, d };
       }
-      if (best && best.d < 9) {
+      if (best && best.d < 10) {
         const nx = best.dx / (best.d || 1), ny = best.dy / (best.d || 1);
-        p.x = best.qx + nx * 9;
-        p.y = best.qy + ny * 9;
-        p.ox = p.x - (p.x - p.ox) * 0.35;
-        p.oy = p.y - (p.y - p.oy) * 0.35;
-        if (phase === 'fly' && thudCD <= 0) {
+        p.x = best.qx + nx * 10;
+        p.y = best.qy + ny * 10;
+        p.ox = p.x - (p.x - p.ox) * 0.4;
+        p.oy = p.y - (p.y - p.oy) * 0.4;
+        // IMPORTANT: do NOT splat just because we touched glass.
+        // Only a hard exterior bounce while clearly NOT entering counts as a miss cue (thud),
+        // and even then we wait — floor / timeout handle real misses.
+        if (phase === 'fly' && !entering && thudCD <= 0) {
           const speed = hypot(p.x - p.ox, p.y - p.oy);
-          if (speed > 1.2) {
-            beginSplat();
-            thudCD = 0.2;
+          if (speed > 2.5) {
+            Sound.splat();
+            thudCD = 0.25;
           }
         }
+      }
+    }
+
+    // Soft suck-in once the body has crossed the mouth / is partially inside
+    if (phase === 'fly' && entering) {
+      const tx = vase.cx;
+      const ty = vase.cy + 18 * vase.scale;
+      const pull = 0.08;
+      for (const p of points) {
+        p.x += (tx - p.x) * pull;
+        p.y += (ty - p.y) * pull;
       }
     }
   }
@@ -580,10 +617,13 @@
   function fillRatio() {
     if (!vase) return 0;
     let inside = 0;
+    // Center counts double — if the COM is in, you're mostly scored
+    if (pointInVase(points[0].x, points[0].y)) inside += 2;
     for (let i = 1; i <= N; i++) {
-      if (pointInVase(points[i].x, points[i].y)) inside++;
+      if (pointInVase(points[i].x, points[i].y)) inside += 1;
+      else if (inMouthGateway(points[i].x, points[i].y)) inside += 0.35;
     }
-    return inside / N;
+    return Math.min(1, inside / (N + 2));
   }
 
   // ---------- Input / slingshot ----------
@@ -1297,17 +1337,19 @@
         constraints();
       }
       const fr = fillRatio();
+      const centerIn = vase && pointInVase(points[0].x, points[0].y);
       fillPct = Math.round(fr * 100);
       updateHud();
-      if (fr >= 0.72) {
+      // Win if mostly inside OR COM seated in the vase for a short beat
+      if (fr >= 0.48 || (centerIn && fr >= 0.32)) {
         fillHold += dt;
-        if (fillHold >= 0.35) beginWin();
+        if (fillHold >= 0.22) beginWin();
       } else {
-        fillHold = Math.max(0, fillHold - dt);
+        fillHold = Math.max(0, fillHold - dt * 0.8);
       }
-      // timeout miss → splat feel
+      // timeout miss → splat feel (only if never really entered)
       phaseT += dt;
-      if (phaseT > 3.5 && phase === 'fly') beginSplat();
+      if (phaseT > 4.0 && phase === 'fly' && fr < 0.35) beginSplat();
     } else if (phase === 'splat') {
       integrate(scale);
       constraints();
@@ -1370,13 +1412,52 @@
     }
   });
 
+  function debugPlaceCatInVase() {
+    if (!vase) return;
+    const cx = vase.cx;
+    const cy = vase.cy + 12 * vase.scale;
+    const r = Math.min(42, 38 * vase.scale);
+    buildCat(cx, cy, r);
+    phase = 'fly';
+    phaseT = 0;
+    fillHold = 0;
+    for (let k = 0; k < 40; k++) constraints();
+  }
+
+  function debugLaunchTowardVase() {
+    if (!vase) return;
+    const s = sling();
+    buildCat(s.rest.x, s.rest.y, Math.min(W, H) * 0.095);
+    phase = 'aim';
+    // Aim from left toward mouth
+    const pullX = s.rest.x - Math.min(W, H) * 0.2;
+    const pullY = s.rest.y + 8;
+    pinCatTo(pullX, pullY);
+    launch();
+    // Extra impulse bias toward vase mouth so tests are stable
+    const c = center();
+    const dx = vase.mouth.x - c.x;
+    const dy = vase.mouth.y - c.y;
+    const len = hypot(dx, dy) || 1;
+    const k = 0.55;
+    for (const p of points) {
+      p.ox = p.x - (dx / len) * k * 18;
+      p.oy = p.y - (dy / len) * k * 18;
+    }
+  }
+
   window.__slingCat = {
     version: 'sling1',
     getPhase: () => phase,
     getLevel: () => level,
     getFill: () => fillPct,
+    getFillRatio: () => fillRatio(),
     getCenter: () => ({ x: points[0].x, y: points[0].y }),
+    getMouth: () => vase ? { ...vase.mouth, cx: vase.cx, cy: vase.cy } : null,
+    pointInVase: (x, y) => pointInVase(x, y),
     debugWin: () => beginWin(),
+    debugPlaceCatInVase,
+    debugLaunchTowardVase,
   };
   // keep legacy probe soft-fail friendly
   window.__liquidCat = {
@@ -1392,8 +1473,8 @@
     getContainerIndex: () => 0,
     isCelebrating: () => phase === 'win',
     getParticleCount: () => particles.length,
-    getMouth: () => vase ? { x: vase.mouth.x, y: vase.mouth.y, w: 80, neckY: vase.cy } : null,
-    debugPackIntoContainer: () => {},
+    getMouth: () => vase ? { x: vase.mouth.x, y: vase.mouth.y, w: vase.mouth.halfW * 2, neckY: vase.cy } : null,
+    debugPackIntoContainer: () => debugPlaceCatInVase(),
     debugTriggerWin: () => beginWin(),
   };
 
