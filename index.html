@@ -19,15 +19,19 @@ const N = 16, PI2 = Math.PI * 2, H120 = 1 / 120, DAMP = 0.9996, K = 12.5;
 const cl = (v, a, b) => v < a ? a : v > b ? b : v;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const ASSET = 'assets/game/';
-const MAX_LEVEL = 2; // Level 3 art pending
+const MAX_LEVEL = 3;
 
 const IMG_KEYS = [
   'chopsticks', 'bamboo_poles', 'sling_with_cat', 'pouch_launch', 'btn_launch',
   'cat_idle', 'cat_happy', 'cat_fly', 'cat_ball', 'cat_squeeze1', 'cat_squeeze2', 'cat_chopstick_happy',
-  'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue', 'vase_orange_cats', 'glass_tilted',
-  'win_liquid_blue', 'win_liquid_pink', 'shelf_wood',
+  'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue', 'vase_orange_cats', 'glass_tilted', 'wine_glass',
+  'box_cardboard', 'box_glass_move', 'win_liquid_blue', 'win_liquid_pink', 'win_square_in_box',
+  'cat_square_dizzy', 'cat_square_dizzy2', 'cat_square_fly', 'cat_square_face',
+  'shelf_wood', 'shelf_spring',
   'progress_bar', 'progress_fill_rainbow', 'ui_level_word', 'ui_tap_to_aim', 'ui_to', 'ui_aim',
   'ui_try', 'ui_again', 'ui_swish', 'ui_level_complete', 'ui_100pct', 'ui_full_word',
+  'ui_purrfect', 'ui_perfect', 'ui_streak', 'ui_trick',
+  'coin_gold', 'coin_silver', 'coin_bronze',
   'star_pink', 'star_yellow', 'star_sm', 'star_spark', 'paw1', 'paw2'
 ];
 const imgs = {};
@@ -58,11 +62,12 @@ function drawImg(key, x, y, w, h, rot, alpha, pivotX, pivotY) {
 
 let W = 0, H = 0, u = 1, dpr = 1, bgGrad = null;
 let state = 'aim', stateT = 0, time = 0, shake = 0, score = 0, hintA = 1;
-let level = 1, streak = 0, trickShot = false, vaseShake = 0, splatFlat = 1;
+let level = 1, streak = 0, trickShot = false, purrfect = false, vaseShake = 0, splatFlat = 1;
 let dragging = false, flyT = 0, calmT = 0, impact = 0, thudCD = 0, shelfHit = false;
 const A = { x: 0, y: 0 }, pull = { x: 0, y: 0 };
-const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, ang: 0, kind: 'vase_teal', winKey: 'win_liquid_blue' };
+const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, ang: 0, kind: 'vase_teal', winKey: 'win_liquid_blue', shape: 'vase' };
 const Shelf = { on: false, x: 0, y: 0, w: 0, h: 0 };
+const Mover = { on: false, x0: 0, x1: 0, speed: 0, dir: 1, baseY: 0 };
 const px = new Float64Array(N + 1), py = new Float64Array(N + 1);
 const ox = new Float64Array(N + 1), oy = new Float64Array(N + 1);
 let R = 30, S = 1, stars = [], conf = [], amb = [];
@@ -153,8 +158,11 @@ function initCat() {
 
 function placeLevel() {
   Shelf.on = false;
+  Mover.on = false;
   V.th = 6 * u;
+  V.shape = 'vase';
   trickShot = false;
+  purrfect = false;
   vaseShake = 0;
   shelfHit = false;
 
@@ -166,7 +174,7 @@ function placeLevel() {
     V.hw = 50 * u;
     V.t = H * 0.22; V.b = V.t + 150 * u;
     V.x = W * 0.58;
-  } else {
+  } else if (level === 2) {
     // Level 2: tilted glass ~30° + bouncy shelf
     V.kind = 'glass_tilted';
     V.winKey = 'win_liquid_pink';
@@ -179,6 +187,21 @@ function placeLevel() {
     Shelf.h = 26 * u;
     Shelf.x = W * 0.42;
     Shelf.y = H * 0.48;
+  } else {
+    // Level 3: ping-pong cardboard / glass box ("If it fits, I sits")
+    V.kind = 'box_cardboard';
+    V.winKey = 'win_square_in_box';
+    V.shape = 'box';
+    V.ang = 0;
+    V.hw = 55 * u;
+    V.t = H * 0.20; V.b = V.t + 120 * u;
+    V.x = W * 0.55;
+    Mover.on = true;
+    Mover.x0 = W * 0.28;
+    Mover.x1 = W * 0.72;
+    Mover.speed = 70 * u;
+    Mover.dir = 1;
+    Mover.baseY = (V.t + V.b) / 2;
   }
 }
 
@@ -245,7 +268,8 @@ function collideVasePoint(i) {
   const loc = toLocal(px[i], py[i]);
   const hw = V.hw, hh = (V.b - V.t) / 2, th = V.th;
   // Open mouth: ignore points above local top (entry gateway)
-  if (loc.y < -hh + 10 * u) return;
+  const mouthPad = V.shape === 'box' ? 6 * u : 10 * u;
+  if (loc.y < -hh + mouthPad) return;
   const x0 = -hw - th, x1 = hw + th, y0 = -hh, y1 = hh + th;
   // Left wall
   if (loc.x > x0 && loc.x < -hw + 4 * u && loc.y > y0 && loc.y < y1) {
@@ -265,6 +289,16 @@ function collideVasePoint(i) {
     const n = fromLocalN(0, -1);
     hit(i, n.x, n.y, pen, 0.15);
   }
+}
+function stepMover(dt) {
+  if (!Mover.on || state === 'win') return;
+  V.x += Mover.dir * Mover.speed * dt;
+  if (V.x > Mover.x1) { V.x = Mover.x1; Mover.dir = -1; }
+  if (V.x < Mover.x0) { V.x = Mover.x0; Mover.dir = 1; }
+  // Soft bob
+  const cy = Mover.baseY + Math.sin(time * 2.4) * 4 * u;
+  const hh = (V.b - V.t) / 2;
+  V.t = cy - hh; V.b = cy + hh;
 }
 function collideShelf(i) {
   if (!Shelf.on) return false;
@@ -407,32 +441,36 @@ function pointInVase(x, y) {
   return loc.x > -hw && loc.x < hw && loc.y > -hh && loc.y < hh;
 }
 function win() {
-  state = 'win'; stateT = 0; score++; shake = 1.2;
+  state = 'win'; stateT = 0; score++; shake = level === 3 ? 1.8 : 1.2;
   vaseShake = 1;
   trickShot = level === 2;
+  purrfect = level === 3;
   streak++;
   winSound();
   burstEl.classList.add('show');
   setTimeout(() => burstEl.classList.remove('show'), 2000);
-  for (let i = 0; i < 80; i++)
+  const n = level === 3 ? 110 : 80;
+  for (let i = 0; i < n; i++) {
+    const coin = level === 3 && i % 4 === 0;
     conf.push({
-      x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-480, 480) * u, vy: -rnd(300, 980) * u,
-      rot: rnd(0, PI2), vr: rnd(-8, 8), size: rnd(10, 20) * u,
-      kind: i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow'), life: 1
+      x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-520, 520) * u, vy: -rnd(320, 1100) * u,
+      rot: rnd(0, PI2), vr: rnd(-8, 8),
+      size: coin ? rnd(18, 28) * u : rnd(10, 20) * u,
+      kind: coin ? (i % 3 === 0 ? 'coin_gold' : (i % 3 === 1 ? 'coin_silver' : 'coin_bronze'))
+        : (i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow')),
+      life: 1
     });
+  }
 }
 function advanceLevel() {
-  if (level >= MAX_LEVEL) {
-    level = 1; // Level 3 art not ready — loop
-  } else {
-    level++;
-  }
+  level = level >= MAX_LEVEL ? 1 : level + 1;
   resetRound(true);
 }
 function update(dt) {
   stateT += dt; thudCD -= dt;
   shake = Math.max(0, shake - dt * 2.5);
   vaseShake = Math.max(0, vaseShake - dt * 1.8);
+  stepMover(dt);
   if (impact > 380 * u && thudCD <= 0) { thud(Math.min(1, impact / (1300 * u))); thudCD = 0.09; }
   impact = 0;
   for (let i = conf.length - 1; i >= 0; i--) {
@@ -500,15 +538,21 @@ function drawShelf() {
   }
 }
 function drawVase() {
-  const vh = (V.b - V.t) * 1.2;
-  const vw = V.kind === 'glass_tilted' ? vh * 0.95 : vh * 0.72;
+  const vh = (V.b - V.t) * (V.shape === 'box' ? 1.05 : 1.2);
+  const vw = V.shape === 'box' ? vh * 1.05
+    : (V.kind === 'glass_tilted' ? vh * 0.95 : vh * 0.72);
   const cy = (V.t + V.b) / 2 + 4 * u;
   const shakeA = vaseShake > 0 ? Math.sin(time * 28) * 0.08 * vaseShake : 0;
   const rot = V.ang + shakeA;
-  // On win, swap to liquid-cat-in-vase art
+  // On win, swap to liquid-cat / square-cat-in-box art
   if (state === 'win') {
     const key = V.winKey || 'win_liquid_blue';
-    if (drawImg(key, V.x, cy, vw * 1.05, vh * 1.05, shakeA, 1)) return;
+    const s = V.shape === 'box' ? 1.12 : 1.05;
+    if (drawImg(key, V.x, cy, vw * s, vh * s, shakeA, 1)) return;
+  }
+  // Moving box: show glass-move arrow hint faintly behind
+  if (Mover.on && state !== 'win') {
+    drawImg('box_glass_move', V.x, cy + 4 * u, vw * 1.15, vh * 1.15, 0, 0.28);
   }
   if (!drawImg(V.kind, V.x, cy, vw, vh, rot, 1)) {
     ctx.save();
@@ -592,10 +636,16 @@ function drawHUD() {
   ctx.fillText(Math.round(fill * 100) + '% FULL', W - 16 * u, by);
 
   if (streak > 0) {
-    ctx.textAlign = 'left';
-    ctx.font = '800 ' + 13 * u + 'px ui-rounded,"SF Pro Rounded",system-ui,sans-serif';
-    ctx.fillStyle = '#C45C9A';
-    ctx.fillText('STREAK x' + streak, 16 * u, by + 22 * u);
+    if (!drawImg('ui_streak', 70 * u, by + 28 * u, 100 * u, 28 * u, 0, 1)) {
+      ctx.textAlign = 'left';
+      ctx.font = '800 ' + 13 * u + 'px ui-rounded,"SF Pro Rounded",system-ui,sans-serif';
+      ctx.fillStyle = '#C45C9A';
+      ctx.fillText('STREAK x' + streak, 16 * u, by + 22 * u);
+    } else {
+      ctx.font = '800 ' + 14 * u + 'px ui-rounded,"SF Pro Rounded",system-ui,sans-serif';
+      ctx.textAlign = 'left'; ctx.fillStyle = '#C45C9A';
+      ctx.fillText('x' + streak, 124 * u, by + 28 * u);
+    }
   }
 
   if (hintA > 0.01 && state === 'aim') {
@@ -615,11 +665,20 @@ function drawHUD() {
   if (state === 'win') {
     const sc = Math.min(1, stateT / 0.35);
     const al = stateT > 2.3 ? Math.max(0, 1 - (stateT - 2.3) / 0.5) : 1;
-    drawImg('ui_swish', W / 2, H * 0.30, 200 * u * sc, 110 * u * sc, 0, al);
+    if (purrfect) {
+      drawImg('ui_purrfect', W / 2, H * 0.28, 240 * u * sc, 70 * u * sc, 0, al);
+      drawImg('cat_square_dizzy', W / 2 - 90 * u, H * 0.48, 70 * u, 70 * u, Math.sin(time * 6) * 0.1, al * 0.9);
+      drawImg('cat_square_dizzy2', W / 2 + 95 * u, H * 0.50, 64 * u, 64 * u, -Math.sin(time * 5) * 0.12, al * 0.9);
+    } else {
+      drawImg('ui_swish', W / 2, H * 0.30, 200 * u * sc, 110 * u * sc, 0, al);
+      if (trickShot) {
+        drawImg('ui_trick', W / 2 - 50 * u, H * 0.50, 90 * u, 36 * u, 0, al);
+        drawBannerText('SHOT!', H * 0.50, 26 * u, sc, al);
+      }
+    }
     drawImg('ui_100pct', W / 2 - 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
     drawImg('ui_full_word', W / 2 + 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
     drawImg('ui_level_complete', W / 2, H * 0.72, 200 * u * sc, 110 * u * sc, 0, al);
-    if (trickShot) drawBannerText('TRICK SHOT!', H * 0.52, 28 * u, sc, al);
     drawImg('star_spark', W / 2 - 110 * u, H * 0.30, 34 * u, 34 * u, time, al);
     drawImg('star_spark', W / 2 + 115 * u, H * 0.34, 28 * u, 28 * u, -time, al);
   }
