@@ -671,10 +671,7 @@ function drawHUD() {
       drawImg('cat_square_dizzy2', W / 2 + 95 * u, H * 0.50, 64 * u, 64 * u, -Math.sin(time * 5) * 0.12, al * 0.9);
     } else {
       drawImg('ui_swish', W / 2, H * 0.30, 200 * u * sc, 110 * u * sc, 0, al);
-      if (trickShot) {
-        drawImg('ui_trick', W / 2 - 50 * u, H * 0.50, 90 * u, 36 * u, 0, al);
-        drawBannerText('SHOT!', H * 0.50, 26 * u, sc, al);
-      }
+      if (trickShot) drawBannerText('TRICK SHOT!', H * 0.52, 28 * u, sc, al);
     }
     drawImg('ui_100pct', W / 2 - 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
     drawImg('ui_full_word', W / 2 + 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
