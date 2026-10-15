@@ -494,9 +494,9 @@ function drawShelf() {
   if (!drawImg('shelf_wood', Shelf.x, Shelf.y, Shelf.w, Shelf.h * 1.6, 0, 1)) {
     ctx.fillStyle = '#C98D57';
     ctx.strokeStyle = '#4A3B6B'; ctx.lineWidth = 4 * u;
-    ctx.beginPath();
-    ctx.roundRect(Shelf.x - Shelf.w / 2, Shelf.y - Shelf.h / 2, Shelf.w, Shelf.h, 8 * u);
-    ctx.fill(); ctx.stroke();
+    const x0 = Shelf.x - Shelf.w / 2, y0 = Shelf.y - Shelf.h / 2;
+    ctx.fillRect(x0, y0, Shelf.w, Shelf.h);
+    ctx.strokeRect(x0, y0, Shelf.w, Shelf.h);
   }
 }
 function drawVase() {
