@@ -779,6 +779,25 @@ function launchTowardVase() {
 }
 
 window.__sling = { st: () => state, V, A, score: () => score, getU: () => u, level: () => level };
+function forceShelfSplat() {
+  if (level !== 2) { level = 2; resetRound(true); }
+  if (!Shelf.on) placeLevel();
+  // Park soft-body on shelf with downward velocity → splat
+  const sx = Shelf.x, sy = Shelf.y - 2 * u;
+  R = 28 * u;
+  px[0] = sx; py[0] = sy;
+  for (let k = 0; k < N; k++) {
+    const a = k / N * PI2;
+    px[k + 1] = sx + Math.cos(a) * R * 0.9;
+    py[k + 1] = sy + Math.sin(a) * R * 0.5;
+  }
+  for (let i = 0; i <= N; i++) {
+    ox[i] = px[i];
+    oy[i] = py[i] - 18 * u; // downward impact
+  }
+  state = 'fly'; stateT = 0; flyT = 0.05; calmT = 0; shelfHit = false; impact = 900 * u;
+  beginSplat();
+}
 window.__slingCat = {
   version: 'sling1',
   getPhase: mapPhase,
@@ -786,10 +805,13 @@ window.__slingCat = {
   getFill: () => Math.round((state === 'win' ? 1 : fillRatio()) * 100),
   getCenter: () => com(),
   getLevel: () => level,
+  getStreak: () => streak,
+  assetsReady: () => assetsReady,
   pointInVase,
   debugPlaceCatInVase: placeCatInVase,
   debugLaunchTowardVase: launchTowardVase,
-  debugSetLevel: (n) => { level = cl(n | 0, 1, MAX_LEVEL); resetRound(true); }
+  debugSetLevel: (n) => { level = cl(n | 0, 1, MAX_LEVEL); resetRound(true); },
+  debugForceShelfSplat: forceShelfSplat
 };
 window.__liquidCat = { getParticleCount: () => conf.length };
 
