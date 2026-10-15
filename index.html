@@ -24,8 +24,8 @@ const IMG_KEYS = [
   'chopsticks', 'bamboo_poles', 'sling_with_cat', 'pouch_launch', 'btn_launch',
   'cat_idle', 'cat_happy', 'cat_fly', 'cat_ball', 'cat_squeeze1', 'cat_squeeze2', 'cat_chopstick_happy',
   'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue',
-  'progress_bar', 'ui_full', 'ui_level', 'ui_tap_to_aim', 'ui_tap2', 'ui_try_again', 'ui_try_again2',
-  'star_pink', 'star_yellow', 'star_sm', 'paw1', 'paw2'
+  'progress_bar', 'ui_level_word', 'ui_tap_to_aim', 'ui_to', 'ui_aim', 'ui_try', 'ui_again',
+  'star_pink', 'star_yellow', 'star_sm', 'star_spark', 'paw1', 'paw2'
 ];
 const imgs = {};
 let assetsReady = false, assetsFailed = 0;
@@ -176,13 +176,13 @@ function resize() {
   bgGrad.addColorStop(0.55, '#F6EEF8');
   bgGrad.addColorStop(1, '#FFE8F0');
   stars = []; amb = [];
-  for (let i = 0; i < 28; i++) stars.push({
-    x: rnd(0, W), y: rnd(0, H), r: rnd(2.2, 5.5) * u, ph: rnd(0, PI2),
-    kind: i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow')
+  for (let i = 0; i < 14; i++) stars.push({
+    x: rnd(0, W), y: rnd(0, H * 0.7), r: rnd(2.2, 4.5) * u, ph: rnd(0, PI2),
+    kind: i % 4 === 0 ? 'paw1' : (i % 2 ? 'star_pink' : 'star_yellow')
   });
-  for (let i = 0; i < 18; i++) amb.push({
-    x: rnd(0, W), y: rnd(0, H), vy: rnd(10, 26) * u, rot: rnd(0, PI2), vr: rnd(-1.2, 1.2),
-    size: rnd(8, 14) * u, kind: i % 2 ? 'star_sm' : 'paw2'
+  for (let i = 0; i < 10; i++) amb.push({
+    x: rnd(0, W), y: rnd(0, H), vy: rnd(8, 18) * u, rot: rnd(0, PI2), vr: rnd(-0.8, 0.8),
+    size: rnd(6, 11) * u, kind: i % 3 === 0 ? 'paw2' : 'star_sm'
   });
   if (state === 'aim' || state === 'pull') { dragging = false; resetRound(true); }
   else placeVase();
@@ -452,63 +452,59 @@ function trajectory() {
 }
 
 function drawHUD() {
-  const barW = Math.min(W * 0.72, 320 * u), barH = barW * (100 / 691);
-  const bx = W / 2, by = 28 * u + barH / 2;
+  const barW = Math.min(W * 0.62, 280 * u), barH = barW * (100 / 691);
+  const bx = W / 2, by = 36 * u + barH / 2;
   drawImg('progress_bar', bx, by, barW, barH, 0, 1);
 
-  // Fill readout uses score streak as "fullness" pulse on win
   const fill = state === 'win' ? 1 : (state === 'fly' ? Math.min(1, fillRatio()) : 0);
-  if (fill > 0.02) {
-    ctx.save();
-    const fw = barW * 0.86 * fill, fh = barH * 0.42;
-    const rx = bx - barW * 0.43, ry = by - fh / 2;
-    ctx.beginPath();
-    ctx.moveTo(rx + fh / 2, ry);
-    ctx.lineTo(rx + fw - fh / 2, ry);
-    ctx.arc(rx + fw - fh / 2, ry + fh / 2, fh / 2, -Math.PI / 2, Math.PI / 2);
-    ctx.lineTo(rx + fh / 2, ry + fh);
-    ctx.arc(rx + fh / 2, ry + fh / 2, fh / 2, Math.PI / 2, -Math.PI / 2);
-    ctx.closePath();
-    ctx.clip();
-    ctx.fillStyle = 'rgba(255,120,170,0.35)';
-    ctx.fillRect(bx - barW / 2, by - barH / 2, barW, barH);
-    ctx.restore();
-  }
 
-  const lvW = 78 * u, lvH = lvW * (89 / 167);
-  drawImg('ui_level', 18 * u + lvW / 2, by, lvW, lvH, 0, 1);
-  ctx.font = '800 ' + 13 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
+  // LEVEL word + number (left)
+  const lw = 72 * u, lh = lw * (56 / 161);
+  drawImg('ui_level_word', 16 * u + lw / 2, by - 2 * u, lw, lh, 0, 1);
+  ctx.font = '800 ' + 15 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#4A3B6B';
-  ctx.fillText(String(level).padStart(2, '0'), 18 * u + lvW * 0.55, by + 1 * u);
+  ctx.fillText(String(level).padStart(2, '0'), 16 * u + lw + 4 * u, by);
 
   ctx.textAlign = 'right';
-  ctx.fillText(Math.round(fill * 100) + '% FULL', W - 18 * u, by);
+  ctx.fillText(Math.round(fill * 100) + '% FULL', W - 16 * u, by);
 
   if (hintA > 0.01 && state === 'aim') {
     if (hintA < 1) hintA -= 0.015;
     const pulse = 0.75 + 0.25 * Math.sin(time * 3);
-    const tw = 150 * u, th = tw * (79 / 166);
-    drawImg('ui_tap_to_aim', W / 2, H * 0.38, tw, th, 0, hintA * pulse);
+    const y = H * 0.36;
+    const tw = 72 * u, th = tw * (79 / 166);
+    const toW = 48 * u, aimW = 78 * u;
+    drawImg('ui_tap_to_aim', W / 2 - 70 * u, y, tw, th, 0, hintA * pulse);
+    drawImg('ui_to', W / 2 - 8 * u, y, toW, toW, 0, hintA * pulse);
+    drawImg('ui_aim', W / 2 + 62 * u, y, aimW, aimW * (79 / 180), 0, hintA * pulse);
   }
 
   if (state === 'aim' || state === 'pull') {
-    const bw = 150 * u, bh = bw * (262 / 528);
-    drawImg('pouch_launch', W / 2, H - 28 * u - bh / 2, bw, bh, 0, state === 'pull' ? 0.55 : 0.9);
+    const bw = 168 * u, bh = bw * (194 / 340);
+    drawImg('btn_launch', W / 2, H - 22 * u - bh / 2, bw, bh, 0, state === 'pull' ? 0.5 : 0.95);
   }
 
   if (state === 'win') {
     const sc = Math.min(1, stateT / 0.35);
     const al = stateT > 2.1 ? Math.max(0, 1 - (stateT - 2.1) / 0.4) : 1;
-    const fw = 200 * u * (0.85 + 0.15 * sc), fh = fw * (87 / 278);
-    drawImg('ui_full', W / 2, H * 0.48, fw, fh, 0, al);
-    if (imgs.cat_chopstick_happy) {
-      drawImg('cat_chopstick_happy', W / 2, H * 0.62, 160 * u * sc, 90 * u * sc, 0, al * 0.95);
-    }
+    ctx.save();
+    ctx.globalAlpha = al;
+    ctx.translate(W / 2, H * 0.44);
+    ctx.scale(0.85 + 0.15 * sc, 0.85 + 0.15 * sc);
+    ctx.font = '900 ' + 42 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 10 * u; ctx.strokeStyle = '#4A3B6B'; ctx.strokeText('100% FULL', 0, 0);
+    ctx.fillStyle = '#FFF6B8'; ctx.fillText('100% FULL', 0, 0);
+    ctx.restore();
+    drawImg('star_spark', W / 2 - 90 * u, H * 0.44 - 40 * u, 36 * u, 36 * u, time, al);
+    drawImg('star_spark', W / 2 + 95 * u, H * 0.44 + 20 * u, 28 * u, 28 * u, -time * 1.3, al);
   }
 
   if (state === 'fly' && calmT > 0.35) {
-    const tw = 140 * u, th = tw * (85 / 161);
-    drawImg('ui_try_again', W / 2, H * 0.42, tw, th, 0, Math.min(1, calmT));
+    const a = Math.min(1, calmT);
+    drawImg('ui_try', W / 2 - 55 * u, H * 0.42, 90 * u, 48 * u, 0, a);
+    drawImg('ui_again', W / 2 + 55 * u, H * 0.42, 120 * u, 48 * u, 0, a);
   }
 }
 
@@ -519,7 +515,7 @@ function draw() {
   ctx.save();
   if (shake > 0) ctx.translate(rnd(-1, 1) * 10 * u * shake, rnd(-1, 1) * 10 * u * shake);
 
-  drawChopsticksFork();
+  if (state !== 'win') drawChopsticksFork();
 
   const c = com();
   let rr = 0;
@@ -531,7 +527,7 @@ function draw() {
   if (state === 'pull') trajectory();
 
   // Cat behind vase rim when entering / inside
-  const insideish = c.y > V.t - 8 * u && Math.abs(c.x - V.x) < V.hw * 1.2;
+  const insideish = (state === 'fly' || state === 'win') && c.y > V.t - 8 * u && Math.abs(c.x - V.x) < V.hw * 1.2;
   if (!insideish) drawCat(c, rr);
   drawVase();
   if (insideish) drawCat(c, rr);
