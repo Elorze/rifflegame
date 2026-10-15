@@ -19,12 +19,15 @@ const N = 16, PI2 = Math.PI * 2, H120 = 1 / 120, DAMP = 0.9996, K = 12.5;
 const cl = (v, a, b) => v < a ? a : v > b ? b : v;
 const rnd = (a, b) => a + Math.random() * (b - a);
 const ASSET = 'assets/game/';
+const MAX_LEVEL = 2; // Level 3 art pending
 
 const IMG_KEYS = [
   'chopsticks', 'bamboo_poles', 'sling_with_cat', 'pouch_launch', 'btn_launch',
   'cat_idle', 'cat_happy', 'cat_fly', 'cat_ball', 'cat_squeeze1', 'cat_squeeze2', 'cat_chopstick_happy',
-  'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue',
-  'progress_bar', 'ui_level_word', 'ui_tap_to_aim', 'ui_to', 'ui_aim', 'ui_try', 'ui_again',
+  'vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue', 'vase_orange_cats', 'glass_tilted',
+  'win_liquid_blue', 'win_liquid_pink', 'shelf_wood',
+  'progress_bar', 'progress_fill_rainbow', 'ui_level_word', 'ui_tap_to_aim', 'ui_to', 'ui_aim',
+  'ui_try', 'ui_again', 'ui_swish', 'ui_level_complete', 'ui_100pct', 'ui_full_word',
   'star_pink', 'star_yellow', 'star_sm', 'star_spark', 'paw1', 'paw2'
 ];
 const imgs = {};
@@ -47,18 +50,19 @@ function drawImg(key, x, y, w, h, rot, alpha, pivotX, pivotY) {
   if (alpha != null) ctx.globalAlpha = alpha;
   ctx.translate(x, y);
   if (rot) ctx.rotate(rot);
-  const px = pivotX == null ? 0.5 : pivotX, py = pivotY == null ? 0.5 : pivotY;
-  ctx.drawImage(im, -w * px, -h * py, w, h);
+  const ox = pivotX == null ? 0.5 : pivotX, oy = pivotY == null ? 0.5 : pivotY;
+  ctx.drawImage(im, -w * ox, -h * oy, w, h);
   ctx.restore();
   return true;
 }
 
 let W = 0, H = 0, u = 1, dpr = 1, bgGrad = null;
-let state = 'aim', stateT = 0, time = 0, shake = 0, score = 0, hintA = 1, level = 1;
-let dragging = false, flyT = 0, calmT = 0, impact = 0, thudCD = 0;
+let state = 'aim', stateT = 0, time = 0, shake = 0, score = 0, hintA = 1;
+let level = 1, streak = 0, trickShot = false, vaseShake = 0, splatFlat = 1;
+let dragging = false, flyT = 0, calmT = 0, impact = 0, thudCD = 0, shelfHit = false;
 const A = { x: 0, y: 0 }, pull = { x: 0, y: 0 };
-const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, rects: [], kind: 'vase_teal' };
-const VASE_KINDS = ['vase_teal', 'vase_blue', 'jar_teal', 'bowl_blue'];
+const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, ang: 0, kind: 'vase_teal', winKey: 'win_liquid_blue' };
+const Shelf = { on: false, x: 0, y: 0, w: 0, h: 0 };
 const px = new Float64Array(N + 1), py = new Float64Array(N + 1);
 const ox = new Float64Array(N + 1), oy = new Float64Array(N + 1);
 let R = 30, S = 1, stars = [], conf = [], amb = [];
@@ -136,9 +140,9 @@ function winSound() {
   tone('sine', 1568, 1568, 0.9, 0.12, 0.06);
 }
 
-/* ---------------- Setup ---------------- */
+/* ---------------- Level setup ---------------- */
 function initCat() {
-  R = 34 * u; S = 1;
+  R = 34 * u; S = 1; splatFlat = 1;
   px[0] = A.x; py[0] = A.y;
   for (let k = 0; k < N; k++) {
     const a = k / N * PI2;
@@ -146,31 +150,50 @@ function initCat() {
   }
   for (let i = 0; i <= N; i++) { ox[i] = px[i]; oy[i] = py[i]; }
 }
-function placeVase() {
-  V.hw = 52 * u; V.th = 6 * u;
-  V.t = H * rnd(0.20, 0.28); V.b = V.t + 148 * u;
-  const m = V.hw + V.th + 10 * u;
-  V.x = rnd(Math.max(m, W * 0.28), Math.min(W - m, W * 0.72));
-  V.kind = VASE_KINDS[(level - 1) % VASE_KINDS.length];
-  const r = 4 * u, x0 = V.x - V.hw, x1 = V.x + V.hw;
-  // Side walls + floor only — open mouth gateway (no top rim collider)
-  V.rects = [
-    [x0 - V.th - r, V.t + 8 * u, x0 + r, V.b + V.th + r],
-    [x1 - r, V.t + 8 * u, x1 + V.th + r, V.b + V.th + r],
-    [x0 - V.th - r, V.b - r, x1 + V.th + r, V.b + V.th + r]
-  ];
+
+function placeLevel() {
+  Shelf.on = false;
+  V.th = 6 * u;
+  trickShot = false;
+  vaseShake = 0;
+  shelfHit = false;
+
+  if (level === 1) {
+    // Straight teal vase — open mouth on top
+    V.kind = 'vase_teal';
+    V.winKey = 'win_liquid_blue';
+    V.ang = 0;
+    V.hw = 50 * u;
+    V.t = H * 0.22; V.b = V.t + 150 * u;
+    V.x = W * 0.58;
+  } else {
+    // Level 2: tilted glass ~30° + bouncy shelf
+    V.kind = 'glass_tilted';
+    V.winKey = 'win_liquid_pink';
+    V.ang = 30 * Math.PI / 180;
+    V.hw = 48 * u;
+    V.t = H * 0.18; V.b = V.t + 145 * u;
+    V.x = W * 0.62;
+    Shelf.on = true;
+    Shelf.w = 130 * u;
+    Shelf.h = 26 * u;
+    Shelf.x = W * 0.42;
+    Shelf.y = H * 0.48;
+  }
 }
-function resetRound(newVase) {
-  state = 'aim'; stateT = 0; flyT = 0; calmT = 0;
+
+function resetRound(newLayout) {
+  state = 'aim'; stateT = 0; flyT = 0; calmT = 0; shelfHit = false;
   initCat();
-  if (newVase) placeVase();
+  if (newLayout) placeLevel();
 }
+
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, 3);
   W = window.innerWidth; H = window.innerHeight;
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   u = cl(Math.min(W, H * 0.55) / 390, 0.55, 1.7);
-  A.x = W * 0.38; A.y = H * 0.78;
+  A.x = W * 0.34; A.y = H * 0.78;
   bgGrad = ctx.createLinearGradient(0, 0, 0, H);
   bgGrad.addColorStop(0, '#EDE8F8');
   bgGrad.addColorStop(0.55, '#F6EEF8');
@@ -184,8 +207,8 @@ function resize() {
     x: rnd(0, W), y: rnd(0, H), vy: rnd(8, 18) * u, rot: rnd(0, PI2), vr: rnd(-0.8, 0.8),
     size: rnd(6, 11) * u, kind: i % 3 === 0 ? 'paw2' : 'star_sm'
   });
-  if (state === 'aim' || state === 'pull') { dragging = false; resetRound(true); }
-  else placeVase();
+  if (state === 'aim' || state === 'pull' || state === 'splat') { dragging = false; resetRound(true); }
+  else placeLevel();
 }
 
 /* ---------------- Physics ---------------- */
@@ -197,31 +220,81 @@ function area() {
   }
   return a / 2;
 }
-function hit(i, nx, ny, pen) {
+function hit(i, nx, ny, pen, bounce) {
   const vx = px[i] - ox[i], vy = py[i] - oy[i];
   px[i] += nx * pen; py[i] += ny * pen;
   const vn = vx * nx + vy * ny;
+  const b = bounce == null ? 0.25 : bounce;
   if (vn < 0) {
-    const nvx = (vx - vn * nx) * 0.92 - vn * nx * 0.25;
-    const nvy = (vy - vn * ny) * 0.92 - vn * ny * 0.25;
+    const nvx = (vx - vn * nx) * 0.92 - vn * nx * b;
+    const nvy = (vy - vn * ny) * 0.92 - vn * ny * b;
     ox[i] = px[i] - nvx; oy[i] = py[i] - nvy;
     impact = Math.max(impact, -vn / H120);
   }
 }
+function toLocal(x, y) {
+  const cx = V.x, cy = (V.t + V.b) / 2;
+  const dx = x - cx, dy = y - cy, ca = Math.cos(-V.ang), sa = Math.sin(-V.ang);
+  return { x: dx * ca - dy * sa, y: dx * sa + dy * ca };
+}
+function fromLocalN(nx, ny) {
+  const ca = Math.cos(V.ang), sa = Math.sin(V.ang);
+  return { x: nx * ca - ny * sa, y: nx * sa + ny * ca };
+}
+function collideVasePoint(i) {
+  const loc = toLocal(px[i], py[i]);
+  const hw = V.hw, hh = (V.b - V.t) / 2, th = V.th;
+  // Open mouth: ignore points above local top (entry gateway)
+  if (loc.y < -hh + 10 * u) return;
+  const x0 = -hw - th, x1 = hw + th, y0 = -hh, y1 = hh + th;
+  // Left wall
+  if (loc.x > x0 && loc.x < -hw + 4 * u && loc.y > y0 && loc.y < y1) {
+    const pen = (-hw + 4 * u) - loc.x;
+    const n = fromLocalN(-1, 0);
+    hit(i, n.x, n.y, pen, 0.2);
+  }
+  // Right wall
+  if (loc.x < x1 && loc.x > hw - 4 * u && loc.y > y0 && loc.y < y1) {
+    const pen = loc.x - (hw - 4 * u);
+    const n = fromLocalN(1, 0);
+    hit(i, n.x, n.y, pen, 0.2);
+  }
+  // Floor
+  if (loc.x > -hw - th && loc.x < hw + th && loc.y > hh - 6 * u && loc.y < y1) {
+    const pen = loc.y - (hh - 6 * u);
+    const n = fromLocalN(0, -1);
+    hit(i, n.x, n.y, pen, 0.15);
+  }
+}
+function collideShelf(i) {
+  if (!Shelf.on) return false;
+  const x = px[i], y = py[i];
+  const x0 = Shelf.x - Shelf.w / 2, x1 = Shelf.x + Shelf.w / 2;
+  const y0 = Shelf.y - Shelf.h / 2, y1 = Shelf.y + Shelf.h / 2;
+  if (x <= x0 || x >= x1 || y <= y0 || y >= y1) return false;
+  const a = x - x0, b = x1 - x, c = y - y0, d = y1 - y, m = Math.min(a, b, c, d);
+  // Strong bounce on top face
+  if (m === c) hit(i, 0, -1, c, 0.85);
+  else if (m === d) hit(i, 0, 1, d, 0.4);
+  else if (m === a) hit(i, -1, 0, a, 0.55);
+  else hit(i, 1, 0, b, 0.55);
+  return true;
+}
 function collide() {
   const r = 4 * u;
+  let shelfTouches = 0;
   for (let i = 0; i <= N; i++) {
-    if (px[i] < r) hit(i, 1, 0, r - px[i]);
-    else if (px[i] > W - r) hit(i, -1, 0, px[i] - (W - r));
-    if (py[i] > H - r) hit(i, 0, -1, py[i] - (H - r));
-    for (const q of V.rects) {
-      const x = px[i], y = py[i];
-      if (x > q[0] && x < q[2] && y > q[1] && y < q[3]) {
-        const a = x - q[0], b = q[2] - x, c = y - q[1], d = q[3] - y, m = Math.min(a, b, c, d);
-        if (m === a) hit(i, -1, 0, a); else if (m === b) hit(i, 1, 0, b);
-        else if (m === c) hit(i, 0, -1, c); else hit(i, 0, 1, d);
-      }
-    }
+    // Walls — Level 2 encourages wall bounce
+    const wb = level >= 2 ? 0.55 : 0.25;
+    if (px[i] < r) hit(i, 1, 0, r - px[i], wb);
+    else if (px[i] > W - r) hit(i, -1, 0, px[i] - (W - r), wb);
+    if (py[i] > H - r) hit(i, 0, -1, py[i] - (H - r), 0.2);
+    if (collideShelf(i)) shelfTouches++;
+    collideVasePoint(i);
+  }
+  if (state === 'fly' && shelfTouches >= 3 && impact > 500 * u && !shelfHit) {
+    shelfHit = true;
+    beginSplat();
   }
 }
 function com() {
@@ -229,27 +302,34 @@ function com() {
   for (let i = 0; i <= N; i++) { x += px[i]; y += py[i]; }
   return { x: x / (N + 1), y: y / (N + 1) };
 }
+function mouthTarget() {
+  // World-space point just above the vase mouth (accounts for tilt)
+  const cx = V.x, cy = (V.t + V.b) / 2;
+  const hh = (V.b - V.t) / 2;
+  const ca = Math.cos(V.ang), sa = Math.sin(V.ang);
+  return { x: cx - sa * (hh + 8 * u), y: cy - ca * (hh + 8 * u) };
+}
 function step(h) {
-  const hh = h * h, g = 1150 * u, pinned = state === 'aim' || state === 'pull';
+  const hh = h * h, g = 1150 * u;
+  const pinned = state === 'aim' || state === 'pull';
   const c = com();
   let vcx = 0, vcy = 0;
   for (let i = 0; i <= N; i++) { vcx += px[i] - ox[i]; vcy += py[i] - oy[i]; }
   vcx /= N + 1; vcy /= N + 1;
   let fx = 0, fy = 0;
   if (state === 'fly') {
-    const tx = V.x, ty = V.t + 24 * u, dx = tx - c.x, dy = ty - c.y, d = Math.hypot(dx, dy), D = 1.3 * V.hw * 2;
-    if (c.y < V.t + 10 * u && d < D && vcy / h > -80 * u) {
-      const w = 1 - d / D, f = 3400 * u * w * w;
+    const mt = mouthTarget();
+    const dx = mt.x - c.x, dy = mt.y - c.y, d = Math.hypot(dx, dy), D = 1.35 * V.hw * 2;
+    if (d < D && vcy / h > -80 * u) {
+      const w = 1 - d / D, f = 3200 * u * w * w;
       fx += dx / (d || 1) * f; fy += dy / (d || 1) * f;
-      fx += -dy / (d || 1) * f * 0.15;
-    } else if (Math.abs(c.x - V.x) < V.hw && c.y > V.t && c.y < V.b) {
-      fx += (V.x - c.x) * 18;
     }
   }
+  const damp = state === 'splat' ? 0.985 : DAMP;
   for (let i = 0; i <= N; i++) {
     const x = px[i], y = py[i];
-    px[i] = x + (x - ox[i]) * DAMP + fx * hh;
-    py[i] = y + (y - oy[i]) * DAMP + (g + fy) * hh;
+    px[i] = x + (x - ox[i]) * damp + fx * hh;
+    py[i] = y + (y - oy[i]) * damp + (g + fy) * hh;
     ox[i] = x; oy[i] = y;
   }
   if (pinned) {
@@ -258,7 +338,9 @@ function step(h) {
     ox[0] = px[0]; oy[0] = py[0];
   }
   if (state === 'win') S += ((V.hw * 0.85) / R - S) * Math.min(1, h * 9);
-  const rs = R * S, tgt = 0.5 * N * Math.sin(PI2 / N) * rs * rs;
+  if (state === 'splat') splatFlat += (0.35 - splatFlat) * Math.min(1, h * 8);
+  const rs = R * S * (state === 'splat' ? splatFlat : 1);
+  const tgt = 0.5 * N * Math.sin(PI2 / N) * rs * rs;
   for (let it = 0; it < 4; it++) {
     for (const [i, j, rest, k] of cons) {
       const dx = px[j] - px[i], dy = py[j] - py[i], d = Math.hypot(dx, dy) || 1e-6;
@@ -278,7 +360,7 @@ function step(h) {
       }
     }
   }
-  collide();
+  if (state !== 'win') collide();
   let ax = 0, ay = 0;
   for (let i = 0; i <= N; i++) { ax += px[i] - ox[i]; ay += py[i] - oy[i]; }
   ax /= N + 1; ay /= N + 1;
@@ -292,31 +374,65 @@ function step(h) {
 function launch() {
   const vx = (A.x - pull.x) * K, vy = (A.y - pull.y) * K;
   for (let i = 0; i <= N; i++) { ox[i] = px[i] - vx * H120; oy[i] = py[i] - vy * H120; }
-  state = 'fly'; stateT = 0; flyT = 0; calmT = 0; hintA = Math.min(hintA, 0.99);
+  state = 'fly'; stateT = 0; flyT = 0; calmT = 0; shelfHit = false;
+  hintA = Math.min(hintA, 0.99);
   tone('sine', 320, 110, 0.14, 0.16);
+}
+function beginSplat() {
+  state = 'splat'; stateT = 0; shake = 0.7; splatFlat = 0.9;
+  thud(0.9);
+  tone('triangle', 90, 40, 0.25, 0.2);
+  // Flatten + give a little sideways slide
+  const c = com();
+  for (let i = 0; i <= N; i++) {
+    py[i] = c.y + (py[i] - c.y) * 0.35;
+    px[i] = c.x + (px[i] - c.x) * 1.35;
+    ox[i] = px[i] - rnd(-2, 2) * u;
+    oy[i] = py[i];
+  }
 }
 function inVase() {
   let n = 0;
-  for (let i = 0; i <= N; i++)
-    if (px[i] > V.x - V.hw && px[i] < V.x + V.hw && py[i] > V.t && py[i] < V.b) n++;
+  for (let i = 0; i <= N; i++) {
+    const loc = toLocal(px[i], py[i]);
+    const hw = V.hw, hh = (V.b - V.t) / 2;
+    if (loc.x > -hw && loc.x < hw && loc.y > -hh && loc.y < hh) n++;
+  }
   return n;
 }
 function fillRatio() { return inVase() / (N + 1); }
+function pointInVase(x, y) {
+  const loc = toLocal(x, y);
+  const hw = V.hw, hh = (V.b - V.t) / 2;
+  return loc.x > -hw && loc.x < hw && loc.y > -hh && loc.y < hh;
+}
 function win() {
-  state = 'win'; stateT = 0; score++; shake = 1;
+  state = 'win'; stateT = 0; score++; shake = 1.2;
+  vaseShake = 1;
+  trickShot = level === 2;
+  streak++;
   winSound();
   burstEl.classList.add('show');
   setTimeout(() => burstEl.classList.remove('show'), 2000);
-  for (let i = 0; i < 70; i++)
+  for (let i = 0; i < 80; i++)
     conf.push({
-      x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-420, 420) * u, vy: -rnd(300, 900) * u,
-      rot: rnd(0, PI2), vr: rnd(-8, 8), size: rnd(10, 18) * u,
+      x: V.x + rnd(-V.hw, V.hw), y: V.t, vx: rnd(-480, 480) * u, vy: -rnd(300, 980) * u,
+      rot: rnd(0, PI2), vr: rnd(-8, 8), size: rnd(10, 20) * u,
       kind: i % 3 === 0 ? 'paw1' : (i % 3 === 1 ? 'star_pink' : 'star_yellow'), life: 1
     });
+}
+function advanceLevel() {
+  if (level >= MAX_LEVEL) {
+    level = 1; // Level 3 art not ready — loop
+  } else {
+    level++;
+  }
+  resetRound(true);
 }
 function update(dt) {
   stateT += dt; thudCD -= dt;
   shake = Math.max(0, shake - dt * 2.5);
+  vaseShake = Math.max(0, vaseShake - dt * 1.8);
   if (impact > 380 * u && thudCD <= 0) { thud(Math.min(1, impact / (1300 * u))); thudCD = 0.09; }
   impact = 0;
   for (let i = conf.length - 1; i >= 0; i--) {
@@ -327,14 +443,14 @@ function update(dt) {
   for (const p of amb) { p.y += p.vy * dt; p.rot += p.vr * dt; if (p.y > H + 10) { p.y = -10; p.x = rnd(0, W); } }
   if (state === 'fly') {
     flyT += dt;
-    // Brief fly window so debug/place + natural entry both register as flight first
     if (flyT > 0.12 && inVase() >= Math.ceil(0.8 * (N + 1))) { win(); return; }
     const c = com(), sp = Math.hypot(px[0] - ox[0], py[0] - oy[0]) / H120;
     calmT = (sp < 60 * u && c.y > H * 0.8) ? calmT + dt : 0;
-    if (calmT > 0.9 || flyT > 7) resetRound(false);
-  } else if (state === 'win' && stateT > 2.5) {
-    level++;
-    resetRound(true);
+    if (calmT > 0.9 || flyT > 8) { streak = 0; resetRound(false); }
+  } else if (state === 'splat') {
+    if (stateT > 1.4) { streak = 0; resetRound(false); }
+  } else if (state === 'win' && stateT > 2.8) {
+    advanceLevel();
   }
 }
 
@@ -356,18 +472,12 @@ function drawBg() {
     }
   }
 }
-
 function drawChopsticksFork() {
-  // Bamboo chopsticks as the slingshot frame (user art)
   const tipX = A.x + 28 * u, tipY = A.y - 18 * u;
   const w = 210 * u, h = w * (288 / 605);
-  // Asset points down-right; rotate so tips face up-right toward the vase
-  const rot = -0.95;
-  drawImg('chopsticks', tipX, tipY + 40 * u, w, h, rot, 1, 0.15, 0.55);
+  drawImg('chopsticks', tipX, tipY + 40 * u, w, h, -0.95, 1, 0.15, 0.55);
 }
-
 function drawBand(c, rr, t) {
-  // Twin elastic cords from chopstick tips to the cat (art-colored)
   const ax = A.x + 42 * u, ay = A.y - 28 * u;
   const left = { x: ax - 10 * u, y: ay }, right = { x: ax + 16 * u, y: ay + 8 * u };
   const lw = (7 - 2.5 * t) * u;
@@ -379,49 +489,55 @@ function drawBand(c, rr, t) {
   ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(c.x - rr * 0.55, c.y + rr * 0.2); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(right.x, right.y); ctx.lineTo(c.x + rr * 0.55, c.y + rr * 0.2); ctx.stroke();
 }
-
-function drawVase() {
-  const vh = (V.b - V.t) * 1.18;
-  const vw = vh * 0.72;
-  const cy = (V.t + V.b) / 2 + 4 * u;
-  const key = V.kind || 'vase_teal';
-  if (!drawImg(key, V.x, cy, vw, vh, 0, 1)) {
-    ctx.fillStyle = 'rgba(112,214,188,0.35)';
-    ctx.strokeStyle = '#70D6BC'; ctx.lineWidth = 6 * u;
+function drawShelf() {
+  if (!Shelf.on) return;
+  if (!drawImg('shelf_wood', Shelf.x, Shelf.y, Shelf.w, Shelf.h * 1.6, 0, 1)) {
+    ctx.fillStyle = '#C98D57';
+    ctx.strokeStyle = '#4A3B6B'; ctx.lineWidth = 4 * u;
     ctx.beginPath();
-    ctx.moveTo(V.x - V.hw, V.t);
-    ctx.lineTo(V.x - V.hw, V.b);
-    ctx.lineTo(V.x + V.hw, V.b);
-    ctx.lineTo(V.x + V.hw, V.t);
-    ctx.stroke();
+    ctx.roundRect(Shelf.x - Shelf.w / 2, Shelf.y - Shelf.h / 2, Shelf.w, Shelf.h, 8 * u);
+    ctx.fill(); ctx.stroke();
   }
-  // Soft mouth highlight so entry reads clearly
-  ctx.save();
-  ctx.globalAlpha = 0.35;
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.ellipse(V.x, V.t + 4 * u, V.hw * 0.85, 9 * u, 0, 0, PI2); ctx.fill();
-  ctx.restore();
 }
-
+function drawVase() {
+  const vh = (V.b - V.t) * 1.2;
+  const vw = V.kind === 'glass_tilted' ? vh * 0.95 : vh * 0.72;
+  const cy = (V.t + V.b) / 2 + 4 * u;
+  const shakeA = vaseShake > 0 ? Math.sin(time * 28) * 0.08 * vaseShake : 0;
+  const rot = V.ang + shakeA;
+  // On win, swap to liquid-cat-in-vase art
+  if (state === 'win') {
+    const key = V.winKey || 'win_liquid_blue';
+    if (drawImg(key, V.x, cy, vw * 1.05, vh * 1.05, shakeA, 1)) return;
+  }
+  if (!drawImg(V.kind, V.x, cy, vw, vh, rot, 1)) {
+    ctx.save();
+    ctx.translate(V.x, cy); ctx.rotate(rot);
+    ctx.strokeStyle = '#70D6BC'; ctx.lineWidth = 6 * u;
+    ctx.strokeRect(-V.hw, -vh / 2, V.hw * 2, vh);
+    ctx.restore();
+  }
+}
 function catSpriteKey() {
+  if (state === 'splat') return 'cat_fly';
   if (state === 'win') return 'cat_happy';
   if (state === 'fly') return flyT < 0.28 ? 'cat_fly' : 'cat_ball';
   if (state === 'pull') return 'cat_fly';
   return 'cat_idle';
 }
-
 function drawCat(c, rr) {
+  if (state === 'win') return; // liquid-in-vase asset covers this
   const pt = state === 'pull' ? Math.min(1, Math.hypot(pull.x - A.x, pull.y - A.y) / (120 * u)) : 0;
   const key = catSpriteKey();
-
   let rot = 0;
   if (state === 'pull') rot = Math.atan2(A.y - pull.y, A.x - pull.x) - Math.PI / 2;
   else if (state === 'fly') rot = cl((px[0] - ox[0]) / H120 / 3500, -0.45, 0.45);
   else if (state === 'aim') rot = Math.sin(time * 2.2) * 0.04;
+  else if (state === 'splat') rot = 0.15;
 
-  const stretch = state === 'pull' ? 1 + 0.28 * pt : (state === 'fly' ? 1.06 : 1);
-  const squash = state === 'pull' ? 1 - 0.2 * pt : (state === 'win' ? 0.92 : 1);
-  const size = rr * 2.55 * (state === 'win' ? S * 1.05 : 1);
+  const stretch = state === 'pull' ? 1 + 0.28 * pt : (state === 'splat' ? 1.55 : (state === 'fly' ? 1.06 : 1));
+  const squash = state === 'pull' ? 1 - 0.2 * pt : (state === 'splat' ? 0.38 : 1);
+  const size = rr * 2.55;
   const w = size * stretch, h = size * squash;
 
   ctx.save();
@@ -429,11 +545,10 @@ function drawCat(c, rr) {
   ctx.rotate(rot);
   if (!drawImg(key, 0, 0, w, h, 0, 1)) {
     ctx.fillStyle = '#FF7A97';
-    ctx.beginPath(); ctx.ellipse(0, 0, rr, rr * 0.95, 0, 0, PI2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(0, 0, rr * stretch, rr * squash, 0, 0, PI2); ctx.fill();
   }
   ctx.restore();
 }
-
 function trajectory() {
   let x = pull.x, y = pull.y, vx = (A.x - pull.x) * K, vy = (A.y - pull.y) * K;
   const h = 1 / 60, g = 1150 * u, d = Math.pow(DAMP, 2);
@@ -449,7 +564,17 @@ function trajectory() {
     }
   }
 }
-
+function drawBannerText(txt, y, size, sc, alpha) {
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(W / 2, y);
+  ctx.scale(sc, sc);
+  ctx.font = '900 ' + size + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = size * 0.16; ctx.strokeStyle = '#4A3B6B'; ctx.strokeText(txt, 0, 0);
+  ctx.fillStyle = '#FFE566'; ctx.fillText(txt, 0, 0);
+  ctx.restore();
+}
 function drawHUD() {
   const barW = Math.min(W * 0.62, 280 * u), barH = barW * (100 / 691);
   const bx = W / 2, by = 36 * u + barH / 2;
@@ -457,7 +582,6 @@ function drawHUD() {
 
   const fill = state === 'win' ? 1 : (state === 'fly' ? Math.min(1, fillRatio()) : 0);
 
-  // LEVEL word + number (left)
   const lw = 72 * u, lh = lw * (56 / 161);
   drawImg('ui_level_word', 16 * u + lw / 2, by - 2 * u, lw, lh, 0, 1);
   ctx.font = '800 ' + 15 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
@@ -467,15 +591,20 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.fillText(Math.round(fill * 100) + '% FULL', W - 16 * u, by);
 
+  if (streak > 0) {
+    ctx.textAlign = 'left';
+    ctx.font = '800 ' + 13 * u + 'px ui-rounded,"SF Pro Rounded",system-ui,sans-serif';
+    ctx.fillStyle = '#C45C9A';
+    ctx.fillText('STREAK x' + streak, 16 * u, by + 22 * u);
+  }
+
   if (hintA > 0.01 && state === 'aim') {
-    if (hintA < 1) hintA -= 0.015;
+    if (hintA < 1) hintA -= 0.012;
     const pulse = 0.75 + 0.25 * Math.sin(time * 3);
-    const y = H * 0.36;
-    const tw = 72 * u, th = tw * (79 / 166);
-    const toW = 48 * u, aimW = 78 * u;
-    drawImg('ui_tap_to_aim', W / 2 - 70 * u, y, tw, th, 0, hintA * pulse);
-    drawImg('ui_to', W / 2 - 8 * u, y, toW, toW, 0, hintA * pulse);
-    drawImg('ui_aim', W / 2 + 62 * u, y, aimW, aimW * (79 / 180), 0, hintA * pulse);
+    const y = H * 0.34;
+    drawImg('ui_tap_to_aim', W / 2 - 70 * u, y, 72 * u, 34 * u, 0, hintA * pulse);
+    drawImg('ui_to', W / 2 - 8 * u, y, 48 * u, 48 * u, 0, hintA * pulse);
+    drawImg('ui_aim', W / 2 + 62 * u, y, 78 * u, 34 * u, 0, hintA * pulse);
   }
 
   if (state === 'aim' || state === 'pull') {
@@ -485,28 +614,22 @@ function drawHUD() {
 
   if (state === 'win') {
     const sc = Math.min(1, stateT / 0.35);
-    const al = stateT > 2.1 ? Math.max(0, 1 - (stateT - 2.1) / 0.4) : 1;
-    ctx.save();
-    ctx.globalAlpha = al;
-    ctx.translate(W / 2, H * 0.44);
-    ctx.scale(0.85 + 0.15 * sc, 0.85 + 0.15 * sc);
-    ctx.font = '900 ' + 42 * u + 'px ui-rounded,"SF Pro Rounded","Arial Rounded MT Bold",system-ui,sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 10 * u; ctx.strokeStyle = '#4A3B6B'; ctx.strokeText('100% FULL', 0, 0);
-    ctx.fillStyle = '#FFF6B8'; ctx.fillText('100% FULL', 0, 0);
-    ctx.restore();
-    drawImg('star_spark', W / 2 - 90 * u, H * 0.44 - 40 * u, 36 * u, 36 * u, time, al);
-    drawImg('star_spark', W / 2 + 95 * u, H * 0.44 + 20 * u, 28 * u, 28 * u, -time * 1.3, al);
+    const al = stateT > 2.3 ? Math.max(0, 1 - (stateT - 2.3) / 0.5) : 1;
+    drawImg('ui_swish', W / 2, H * 0.30, 200 * u * sc, 110 * u * sc, 0, al);
+    drawImg('ui_100pct', W / 2 - 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
+    drawImg('ui_full_word', W / 2 + 55 * u, H * 0.40, 90 * u, 40 * u, 0, al);
+    drawImg('ui_level_complete', W / 2, H * 0.72, 200 * u * sc, 110 * u * sc, 0, al);
+    if (trickShot) drawBannerText('TRICK SHOT!', H * 0.52, 28 * u, sc, al);
+    drawImg('star_spark', W / 2 - 110 * u, H * 0.30, 34 * u, 34 * u, time, al);
+    drawImg('star_spark', W / 2 + 115 * u, H * 0.34, 28 * u, 28 * u, -time, al);
   }
 
-  if (state === 'fly' && calmT > 0.35) {
-    const a = Math.min(1, calmT);
+  if ((state === 'fly' && calmT > 0.35) || state === 'splat') {
+    const a = state === 'splat' ? Math.min(1, stateT) : Math.min(1, calmT);
     drawImg('ui_try', W / 2 - 55 * u, H * 0.42, 90 * u, 48 * u, 0, a);
     drawImg('ui_again', W / 2 + 55 * u, H * 0.42, 120 * u, 48 * u, 0, a);
   }
 }
-
 function draw() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.globalAlpha = 1;
@@ -515,6 +638,7 @@ function draw() {
   if (shake > 0) ctx.translate(rnd(-1, 1) * 10 * u * shake, rnd(-1, 1) * 10 * u * shake);
 
   if (state !== 'win') drawChopsticksFork();
+  drawShelf();
 
   const c = com();
   let rr = 0;
@@ -525,8 +649,7 @@ function draw() {
   if (state === 'aim' || state === 'pull') drawBand(c, rr, t);
   if (state === 'pull') trajectory();
 
-  // Cat behind vase rim when entering / inside
-  const insideish = (state === 'fly' || state === 'win') && c.y > V.t - 8 * u && Math.abs(c.x - V.x) < V.hw * 1.2;
+  const insideish = (state === 'fly') && pointInVase(c.x, c.y);
   if (!insideish) drawCat(c, rr);
   drawVase();
   if (insideish) drawCat(c, rr);
@@ -551,7 +674,6 @@ cv.addEventListener('pointerdown', e => {
   e.preventDefault();
   if (state !== 'aim') return;
   const p = pt(e);
-  // Allow aiming from lower half OR tapping near the launch pouch
   if (p.y < H * 0.42 && Math.hypot(p.x - W / 2, p.y - (H - 50 * u)) > 90 * u) return;
   dragging = true;
   try { cv.setPointerCapture(e.pointerId); } catch (_) {}
@@ -580,33 +702,38 @@ function mapPhase() {
 function placeCatInVase() {
   const cx = V.x, cy = (V.t + V.b) / 2;
   R = Math.min(R, V.hw * 0.7);
+  // Place in local interior then leave as world (approx center)
   px[0] = cx; py[0] = cy;
   for (let k = 0; k < N; k++) {
     const a = k / N * PI2;
-    px[k + 1] = cx + Math.cos(a) * R * 0.85;
-    py[k + 1] = cy + Math.sin(a) * R * 0.85;
+    const lx = Math.cos(a) * R * 0.7, ly = Math.sin(a) * R * 0.7;
+    const ca = Math.cos(V.ang), sa = Math.sin(V.ang);
+    px[k + 1] = cx + lx * ca - ly * sa;
+    py[k + 1] = cy + lx * sa + ly * ca;
   }
   for (let i = 0; i <= N; i++) { ox[i] = px[i]; oy[i] = py[i]; }
   state = 'fly'; stateT = 0; flyT = 0; calmT = 0;
 }
 function launchTowardVase() {
-  const c = com();
-  pull.x = A.x - (V.x - A.x) * 0.35;
+  const mt = mouthTarget();
+  pull.x = A.x - (mt.x - A.x) * 0.28;
   pull.y = A.y + 70 * u;
   setPull(pull);
   launch();
 }
 
-window.__sling = { st: () => state, V, A, score: () => score, getU: () => u };
+window.__sling = { st: () => state, V, A, score: () => score, getU: () => u, level: () => level };
 window.__slingCat = {
   version: 'sling1',
   getPhase: mapPhase,
   getFillRatio: () => (state === 'win' ? 1 : fillRatio()),
   getFill: () => Math.round((state === 'win' ? 1 : fillRatio()) * 100),
   getCenter: () => com(),
-  pointInVase: (x, y) => x > V.x - V.hw && x < V.x + V.hw && y > V.t && y < V.b,
+  getLevel: () => level,
+  pointInVase,
   debugPlaceCatInVase: placeCatInVase,
-  debugLaunchTowardVase: launchTowardVase
+  debugLaunchTowardVase: launchTowardVase,
+  debugSetLevel: (n) => { level = cl(n | 0, 1, MAX_LEVEL); resetRound(true); }
 };
 window.__liquidCat = { getParticleCount: () => conf.length };
 
