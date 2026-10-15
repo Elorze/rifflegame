@@ -427,15 +427,15 @@
   function buildGoblet() {
     const cx = W * 0.5;
     const baseY = H * 0.915;
-    const topY = H * 0.50;
-    const neckY = H * 0.605;
-    const bowlY = H * 0.76;
+    const topY = H * 0.505;
+    const neckY = H * 0.615;
+    const bowlY = H * 0.765;
     const footY = H * 0.88;
-    const rimW = Math.min(W, H) * 0.135;
-    const neckW = Math.min(W, H) * 0.052;
-    const bowlW = Math.min(W, H) * 0.168;
+    const rimW = Math.min(W, H) * 0.15;
+    const neckW = Math.min(W, H) * 0.068;
+    const bowlW = Math.min(W, H) * 0.18;
     const footW = Math.min(W, H) * 0.095;
-    const bottomW = Math.min(W, H) * 0.145;
+    const bottomW = Math.min(W, H) * 0.15;
 
     const L = [
       { x: cx - rimW, y: topY },
@@ -909,39 +909,60 @@
   }
 
   function drawEars(c) {
-    const tipScale = 0.55;
-    function ear(baseL, baseR) {
-      const mx = (baseL.x + baseR.x) * 0.5;
-      const my = (baseL.y + baseR.y) * 0.5;
-      let nx = -(baseR.y - baseL.y);
-      let ny = baseR.x - baseL.x;
+    // Pick outer points nearest top-left / top-right so ears stay on the "head"
+    // even when the jelly is heavily squished (avoids side spike artifacts).
+    function bestOuterNear(angleTarget) {
+      let best = 1;
+      let bestDiff = Infinity;
+      for (let i = 1; i <= OUTER_N; i++) {
+        const p = points[i];
+        let ang = Math.atan2(p.y - c.y, p.x - c.x);
+        let d = ang - angleTarget;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        d = Math.abs(d);
+        if (d < bestDiff) { bestDiff = d; best = i; }
+      }
+      return best;
+    }
+    const leftIdx = bestOuterNear(-Math.PI * 0.72);
+    const rightIdx = bestOuterNear(-Math.PI * 0.28);
+    const tipLen = avgSpokeRest() * 0.48;
+
+    function ear(idx, tipAngBias) {
+      const p = points[idx];
+      const prev = points[idx === 1 ? OUTER_N : idx - 1];
+      const next = points[idx === OUTER_N ? 1 : idx + 1];
+      const baseL = { x: lerp(p.x, prev.x, 0.35), y: lerp(p.y, prev.y, 0.35) };
+      const baseR = { x: lerp(p.x, next.x, 0.35), y: lerp(p.y, next.y, 0.35) };
+      let nx = p.x - c.x;
+      let ny = p.y - c.y;
       const nl = Math.hypot(nx, ny) || 1;
       nx /= nl; ny /= nl;
-      const toC = { x: mx - c.x, y: my - c.y };
-      const sign = toC.x * nx + toC.y * ny < 0 ? -1 : 1;
-      const tipX = mx + nx * sign * (avgSpokeRest() * tipScale);
-      const tipY = my + ny * sign * (avgSpokeRest() * tipScale);
-      // outer ear
+      // Bias tip slightly outward/up so ears read as ears, not spines
+      const tipX = p.x + nx * tipLen + Math.cos(tipAngBias) * tipLen * 0.12;
+      const tipY = p.y + ny * tipLen + Math.sin(tipAngBias) * tipLen * 0.12 - tipLen * 0.08;
+
       ctx.beginPath();
       ctx.moveTo(baseL.x, baseL.y);
-      ctx.quadraticCurveTo(tipX + (baseL.x - mx) * 0.15, tipY + (baseL.y - my) * 0.1, tipX, tipY);
-      ctx.quadraticCurveTo(tipX + (baseR.x - mx) * 0.15, tipY + (baseR.y - my) * 0.1, baseR.x, baseR.y);
+      ctx.quadraticCurveTo(lerp(baseL.x, tipX, 0.55), lerp(baseL.y, tipY, 0.45), tipX, tipY);
+      ctx.quadraticCurveTo(lerp(baseR.x, tipX, 0.55), lerp(baseR.y, tipY, 0.45), baseR.x, baseR.y);
       ctx.closePath();
-      const eg = ctx.createLinearGradient(mx, my, tipX, tipY);
+      const eg = ctx.createLinearGradient(p.x, p.y, tipX, tipY);
       eg.addColorStop(0, COLORS.cat);
       eg.addColorStop(1, COLORS.catDeep);
       ctx.fillStyle = eg;
       ctx.fill();
-      // inner ear
+
       ctx.beginPath();
-      ctx.moveTo(lerp(baseL.x, tipX, 0.28), lerp(baseL.y, tipY, 0.28));
-      ctx.quadraticCurveTo(tipX, tipY, lerp(baseR.x, tipX, 0.28), lerp(baseR.y, tipY, 0.28));
-      ctx.quadraticCurveTo(mx, my, lerp(baseL.x, tipX, 0.28), lerp(baseL.y, tipY, 0.28));
-      ctx.fillStyle = 'rgba(255, 110, 140, 0.42)';
+      ctx.moveTo(lerp(baseL.x, tipX, 0.32), lerp(baseL.y, tipY, 0.32));
+      ctx.quadraticCurveTo(tipX, tipY, lerp(baseR.x, tipX, 0.32), lerp(baseR.y, tipY, 0.32));
+      ctx.quadraticCurveTo(p.x, p.y, lerp(baseL.x, tipX, 0.32), lerp(baseL.y, tipY, 0.32));
+      ctx.fillStyle = 'rgba(255, 120, 150, 0.45)';
       ctx.fill();
     }
-    ear(points[OUTER_N], points[1]);
-    ear(points[1], points[2]);
+    ear(leftIdx, -2.2);
+    ear(rightIdx, -0.9);
   }
 
   function drawFace(c) {
@@ -1085,7 +1106,19 @@
       ctx.restore();
     }
 
-    // outer stroke
+    // thick frosted wall (under) + crisp stroke (over)
+    ctx.beginPath();
+    for (let s = 0; s < container.segments.length; s++) {
+      const seg = container.segments[s];
+      ctx.moveTo(seg.ax, seg.ay);
+      ctx.lineTo(seg.bx, seg.by);
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ctx.lineWidth = 9;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+
     ctx.beginPath();
     for (let s = 0; s < container.segments.length; s++) {
       const seg = container.segments[s];
@@ -1093,7 +1126,7 @@
       ctx.lineTo(seg.bx, seg.by);
     }
     ctx.strokeStyle = locked ? COLORS.lock : COLORS.glass;
-    ctx.lineWidth = 5.5;
+    ctx.lineWidth = 4.2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (locked) {
@@ -1190,6 +1223,16 @@
 
     drawFace(c);
     drawParticles();
+
+    // subtle brand mark — keeps first viewport brand-first without clutter
+    ctx.save();
+    ctx.globalAlpha = 0.28;
+    ctx.fillStyle = '#5a4570';
+    ctx.font = '700 13px "Trebuchet MS", "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Liquid Cat', W * 0.5, H * 0.965);
+    ctx.restore();
+
     ctx.restore();
   }
 
