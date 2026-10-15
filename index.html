@@ -367,18 +367,17 @@ function drawChopsticksFork() {
 }
 
 function drawBand(c, rr, t) {
-  // Elastic loop between chopsticks tip and cat
-  const ax = A.x + 36 * u, ay = A.y - 22 * u;
-  const bx = c.x, by = c.y + rr * 0.15;
-  const mx = (ax + bx) / 2, my = (ay + by) / 2;
-  const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
-  const ang = Math.atan2(dy, dx);
-  const bw = Math.max(70 * u, len * 1.05), bh = (22 - 6 * t) * u;
-  if (!drawImg('bamboo_poles', mx, my, bw, bh, ang, 0.95)) {
-    ctx.strokeStyle = '#C9A07A'; ctx.lineWidth = (8 - 3 * t) * u; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx - rr * 0.5, by); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(ax + 18 * u, ay + 10 * u); ctx.lineTo(bx + rr * 0.5, by); ctx.stroke();
-  }
+  // Twin elastic cords from chopstick tips to the cat (art-colored)
+  const ax = A.x + 42 * u, ay = A.y - 28 * u;
+  const left = { x: ax - 10 * u, y: ay }, right = { x: ax + 16 * u, y: ay + 8 * u };
+  const lw = (7 - 2.5 * t) * u;
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = '#5A3D2E'; ctx.lineWidth = lw + 3 * u;
+  ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(c.x - rr * 0.55, c.y + rr * 0.2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(right.x, right.y); ctx.lineTo(c.x + rr * 0.55, c.y + rr * 0.2); ctx.stroke();
+  ctx.strokeStyle = '#E6C49A'; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(left.x, left.y); ctx.lineTo(c.x - rr * 0.55, c.y + rr * 0.2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(right.x, right.y); ctx.lineTo(c.x + rr * 0.55, c.y + rr * 0.2); ctx.stroke();
 }
 
 function drawVase() {
