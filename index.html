@@ -66,7 +66,7 @@ let level = 1, streak = 0, trickShot = false, purrfect = false, vaseShake = 0, s
 let dragging = false, flyT = 0, calmT = 0, impact = 0, thudCD = 0, shelfHit = false;
 const A = { x: 0, y: 0 }, pull = { x: 0, y: 0 };
 const V = { x: 0, hw: 0, t: 0, b: 0, th: 0, ang: 0, kind: 'vase_teal', winKey: 'win_liquid_blue', shape: 'vase' };
-const Shelf = { on: false, x: 0, y: 0, w: 0, h: 0 };
+const Shelf = { on: false, solid: true, x: 0, y: 0, w: 0, h: 0 };
 const Mover = { on: false, x0: 0, x1: 0, speed: 0, dir: 1, baseY: 0 };
 const px = new Float64Array(N + 1), py = new Float64Array(N + 1);
 const ox = new Float64Array(N + 1), oy = new Float64Array(N + 1);
@@ -158,6 +158,7 @@ function initCat() {
 
 function placeLevel() {
   Shelf.on = false;
+  Shelf.solid = true;
   Mover.on = false;
   V.th = 6 * u;
   V.shape = 'vase';
@@ -175,31 +176,32 @@ function placeLevel() {
     V.t = H * 0.22; V.b = V.t + 150 * u;
     V.x = W * 0.58;
   } else if (level === 2) {
-    // Level 2: tilted glass ~30° + bouncy shelf
+    // Level 2 (interview-easy): mild tilt + decorative side shelf (no blocking)
     V.kind = 'glass_tilted';
     V.winKey = 'win_liquid_pink';
-    V.ang = 30 * Math.PI / 180;
-    V.hw = 48 * u;
-    V.t = H * 0.18; V.b = V.t + 145 * u;
-    V.x = W * 0.62;
+    V.ang = 10 * Math.PI / 180;
+    V.hw = 68 * u;
+    V.t = H * 0.20; V.b = V.t + 155 * u;
+    V.x = W * 0.55;
     Shelf.on = true;
-    Shelf.w = 130 * u;
-    Shelf.h = 26 * u;
-    Shelf.x = W * 0.42;
-    Shelf.y = H * 0.48;
+    Shelf.w = 64 * u;
+    Shelf.h = 20 * u;
+    Shelf.x = W * 0.14; // far left prop — main flight path stays open
+    Shelf.y = H * 0.58;
+    Shelf.solid = false; // visual only for demo friendliness
   } else {
     // Level 3: ping-pong cardboard / glass box ("If it fits, I sits")
     V.kind = 'box_cardboard';
     V.winKey = 'win_square_in_box';
     V.shape = 'box';
     V.ang = 0;
-    V.hw = 55 * u;
-    V.t = H * 0.20; V.b = V.t + 120 * u;
+    V.hw = 62 * u;
+    V.t = H * 0.20; V.b = V.t + 125 * u;
     V.x = W * 0.55;
     Mover.on = true;
-    Mover.x0 = W * 0.28;
-    Mover.x1 = W * 0.72;
-    Mover.speed = 70 * u;
+    Mover.x0 = W * 0.38;
+    Mover.x1 = W * 0.68;
+    Mover.speed = 42 * u; // slower for interview demos
     Mover.dir = 1;
     Mover.baseY = (V.t + V.b) / 2;
   }
@@ -301,32 +303,32 @@ function stepMover(dt) {
   V.t = cy - hh; V.b = cy + hh;
 }
 function collideShelf(i) {
-  if (!Shelf.on) return false;
+  if (!Shelf.on || Shelf.solid === false) return false;
   const x = px[i], y = py[i];
   const x0 = Shelf.x - Shelf.w / 2, x1 = Shelf.x + Shelf.w / 2;
   const y0 = Shelf.y - Shelf.h / 2, y1 = Shelf.y + Shelf.h / 2;
   if (x <= x0 || x >= x1 || y <= y0 || y >= y1) return false;
   const a = x - x0, b = x1 - x, c = y - y0, d = y1 - y, m = Math.min(a, b, c, d);
-  // Strong bounce on top face
-  if (m === c) hit(i, 0, -1, c, 0.85);
-  else if (m === d) hit(i, 0, 1, d, 0.4);
-  else if (m === a) hit(i, -1, 0, a, 0.55);
-  else hit(i, 1, 0, b, 0.55);
+  // Soft bounce — helpful trampoline, not a brick wall
+  if (m === c) hit(i, 0, -1, c, 0.55);
+  else if (m === d) hit(i, 0, 1, d, 0.25);
+  else if (m === a) hit(i, -1, 0, a, 0.35);
+  else hit(i, 1, 0, b, 0.35);
   return true;
 }
 function collide() {
   const r = 4 * u;
   let shelfTouches = 0;
   for (let i = 0; i <= N; i++) {
-    // Walls — Level 2 encourages wall bounce
-    const wb = level >= 2 ? 0.55 : 0.25;
+    const wb = 0.35;
     if (px[i] < r) hit(i, 1, 0, r - px[i], wb);
     else if (px[i] > W - r) hit(i, -1, 0, px[i] - (W - r), wb);
     if (py[i] > H - r) hit(i, 0, -1, py[i] - (H - r), 0.2);
     if (collideShelf(i)) shelfTouches++;
     collideVasePoint(i);
   }
-  if (state === 'fly' && shelfTouches >= 3 && impact > 500 * u && !shelfHit) {
+  // Splat only on a hard, sustained slam — casual clips just bounce
+  if (state === 'fly' && shelfTouches >= 6 && impact > 900 * u && !shelfHit) {
     shelfHit = true;
     beginSplat();
   }
@@ -353,10 +355,20 @@ function step(h) {
   let fx = 0, fy = 0;
   if (state === 'fly') {
     const mt = mouthTarget();
-    const dx = mt.x - c.x, dy = mt.y - c.y, d = Math.hypot(dx, dy), D = 1.35 * V.hw * 2;
-    if (d < D && vcy / h > -80 * u) {
-      const w = 1 - d / D, f = 3200 * u * w * w;
-      fx += dx / (d || 1) * f; fy += dy / (d || 1) * f;
+    const dx = mt.x - c.x, dy = mt.y - c.y, d = Math.hypot(dx, dy);
+    // Interview-friendly suction (L2 heavily assisted)
+    const magnet = level === 1 ? 1.2 : (level === 2 ? 3.0 : 1.7);
+    const D = V.hw * (level === 2 ? 5.5 : 3.4);
+    if (d < D) {
+      const w = Math.max(0, 1 - d / D), f = 4200 * u * w * w * magnet;
+      fx += dx / (d || 1) * f;
+      fy += dy / (d || 1) * f;
+      if (c.y < mt.y + 40 * u) fy += 1200 * u * w;
+    }
+    // L2: if shot is generally upward toward the glass half, nudge home
+    if (level === 2 && c.y < A.y - 40 * u && c.x > W * 0.28) {
+      fx += (mt.x - c.x) * 14;
+      fy += (mt.y - c.y) * 10;
     }
   }
   const damp = state === 'splat' ? 0.985 : DAMP;
@@ -481,7 +493,9 @@ function update(dt) {
   for (const p of amb) { p.y += p.vy * dt; p.rot += p.vr * dt; if (p.y > H + 10) { p.y = -10; p.x = rnd(0, W); } }
   if (state === 'fly') {
     flyT += dt;
-    if (flyT > 0.12 && inVase() >= Math.ceil(0.8 * (N + 1))) { win(); return; }
+    // Softer fill gate so near-misses still count (interview-friendly)
+    const need = level === 2 ? 0.55 : (level === 3 ? 0.6 : 0.7);
+    if (flyT > 0.12 && inVase() >= Math.ceil(need * (N + 1))) { win(); return; }
     const c = com(), sp = Math.hypot(px[0] - ox[0], py[0] - oy[0]) / H120;
     calmT = (sp < 60 * u && c.y > H * 0.8) ? calmT + dt : 0;
     if (calmT > 0.9 || flyT > 8) { streak = 0; resetRound(false); }
@@ -772,8 +786,11 @@ function placeCatInVase() {
 }
 function launchTowardVase() {
   const mt = mouthTarget();
-  pull.x = A.x - (mt.x - A.x) * 0.28;
-  pull.y = A.y + 70 * u;
+  // Pull opposite the mouth so release arcs into it
+  let dx = A.x - mt.x, dy = A.y - mt.y;
+  const m = 100 * u, len = Math.hypot(dx, dy) || 1;
+  pull.x = A.x + dx / len * m * 0.55;
+  pull.y = A.y + Math.max(dy / len * m, 55 * u);
   setPull(pull);
   launch();
 }
