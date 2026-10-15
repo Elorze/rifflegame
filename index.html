@@ -39,24 +39,39 @@
     #hint {
       position: fixed;
       left: 50%;
-      top: max(8%, env(safe-area-inset-top, 0px) + 28px);
+      top: max(6.5%, env(safe-area-inset-top, 0px) + 22px);
       transform: translateX(-50%);
-      color: var(--ink);
-      font-size: clamp(13px, 3.6vw, 16px);
+      color: rgba(90, 69, 112, 0.78);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: clamp(14px, 3.8vw, 17px);
       font-weight: 600;
       letter-spacing: 0.01em;
       pointer-events: none;
-      opacity: 0.72;
+      opacity: 1;
       transition: opacity 0.75s ease, transform 0.75s ease;
       white-space: nowrap;
       z-index: 2;
-      text-shadow: 0 1px 0 rgba(255,255,255,0.65);
+      text-shadow: 0 1px 0 rgba(255,255,255,0.7);
       animation: hintFloat 2.8s ease-in-out infinite;
     }
     #hint.fade {
       opacity: 0;
       transform: translateX(-50%) translateY(-8px);
       animation: none;
+    }
+    #fillHud {
+      position: fixed;
+      left: 50%;
+      bottom: max(3.5%, env(safe-area-inset-bottom, 0px) + 14px);
+      transform: translateX(-50%);
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: rgba(90, 69, 112, 0.45);
+      pointer-events: none;
+      z-index: 2;
+      text-shadow: 0 1px 0 rgba(255,255,255,0.55);
     }
     @keyframes hintFloat {
       0%, 100% { transform: translateX(-50%) translateY(0); }
@@ -86,8 +101,9 @@
   </style>
 </head>
 <body>
-  <div id="hint">Squish the cat into the glass!</div>
+  <div id="hint">Squish the cat into the vase! 🐾</div>
   <div id="burst">POP!</div>
+  <div id="fillHud">0% Full</div>
   <canvas id="c"></canvas>
   <script>
 (function () {
@@ -97,6 +113,7 @@
   const ctx = canvas.getContext('2d');
   const hint = document.getElementById('hint');
   const burstEl = document.getElementById('burst');
+  const fillHud = document.getElementById('fillHud');
 
   const COLORS = {
     bgTop: '#F7F2FF',
@@ -105,14 +122,17 @@
     catMid: '#FF8F98',
     catDeep: '#FF7A8A',
     face: '#FF5277',
-    cheek: 'rgba(255, 120, 150, 0.35)',
-    highlight: 'rgba(255,255,255,0.52)',
-    glass: 'rgba(88, 196, 172, 0.75)',
-    glassRim: 'rgba(255,255,255,0.55)',
-    glassFillTop: 'rgba(160, 235, 215, 0.14)',
-    glassFillBot: 'rgba(112, 214, 188, 0.10)',
+    cheek: 'rgba(255, 140, 170, 0.5)',
+    innerEar: 'rgba(255, 180, 195, 0.95)',
+    pawPad: 'rgba(255, 255, 255, 0.72)',
+    highlight: 'rgba(255,255,255,0.55)',
+    glass: 'rgba(112, 214, 188, 0.8)',
+    glassRim: 'rgba(255,255,255,0.72)',
+    glassFrost: 'rgba(255, 255, 255, 0.35)',
+    glassFillTop: 'rgba(255, 255, 255, 0.28)',
+    glassFillBot: 'rgba(160, 235, 215, 0.12)',
     lock: '#38EF7D',
-    ink: '#3A2A40',
+    ink: '#2B2033',
     confetti: ['#FFD166', '#06D6A0', '#7BDFF2', '#EF476F', '#FF9E9E', '#CDB4FF'],
   };
 
@@ -344,7 +364,8 @@
   const CONSTRAINT_ITERS = 5;
   const DAMPING = 0.984;
   const GRAVITY = 0.155;
-  const RADIUS = () => Math.min(W, H) * 0.148;
+  // ~1.3× previous radius so the gummy cat dominates the viewport
+  const RADIUS = () => Math.min(W, H) * 0.192;
 
   /** @type {{x:number,y:number,ox:number,oy:number,pinned:boolean}[]} */
   let points = [];
@@ -426,16 +447,16 @@
 
   function buildGoblet() {
     const cx = W * 0.5;
-    const baseY = H * 0.915;
-    const topY = H * 0.505;
-    const neckY = H * 0.615;
-    const bowlY = H * 0.765;
-    const footY = H * 0.88;
-    const rimW = Math.min(W, H) * 0.15;
-    const neckW = Math.min(W, H) * 0.068;
-    const bowlW = Math.min(W, H) * 0.18;
-    const footW = Math.min(W, H) * 0.095;
-    const bottomW = Math.min(W, H) * 0.15;
+    const baseY = H * 0.90;
+    const topY = H * 0.44;
+    const neckY = H * 0.56;
+    const bowlY = H * 0.72;
+    const footY = H * 0.845;
+    const rimW = Math.min(W, H) * 0.195;
+    const neckW = Math.min(W, H) * 0.088;
+    const bowlW = Math.min(W, H) * 0.235;
+    const footW = Math.min(W, H) * 0.12;
+    const bottomW = Math.min(W, H) * 0.195;
 
     const L = [
       { x: cx - rimW, y: topY },
@@ -474,10 +495,10 @@
 
   function buildBeaker() {
     const cx = W * 0.5;
-    const topY = H * 0.52;
-    const baseY = H * 0.90;
-    const half = Math.min(W, H) * 0.175;
-    const lip = Math.min(W, H) * 0.012;
+    const topY = H * 0.45;
+    const baseY = H * 0.885;
+    const half = Math.min(W, H) * 0.228;
+    const lip = Math.min(W, H) * 0.016;
     const path = [
       { x: cx - half - lip, y: topY },
       { x: cx - half, y: topY + lip * 1.4 },
@@ -759,7 +780,7 @@
     setContainer(pendingContainerIndex);
     celebrating = false;
     celebrateTimer = 0;
-    buildCat(W * 0.5 - W * 0.85, H * 0.30, RADIUS());
+    buildCat(W * 0.5 - W * 0.85, H * 0.24, RADIUS());
     phase = 'enter';
     transT = 0;
     transDur = 0.58;
@@ -774,7 +795,7 @@
     containerSlide = 0;
     // settle cat to center-top
     const targetX = W * 0.5;
-    const targetY = H * 0.30;
+    const targetY = H * 0.24;
     const c = points[0];
     const dx = targetX - c.x;
     const dy = targetY - c.y;
@@ -804,7 +825,7 @@
       containerSlide = lerp(-W * 0.92, 0, u);
       const c = points[0];
       const wantX = lerp(W * 0.5 - W * 0.85, W * 0.5, u);
-      const wantY = H * 0.30;
+      const wantY = H * 0.24;
       const dx = (wantX - c.x) * 0.22;
       const dy = (wantY - c.y) * 0.18;
       for (let i = 0; i < points.length; i++) {
@@ -915,157 +936,206 @@
     ctx.fill();
   }
 
-  function drawEars(c) {
-    // Pick outer points nearest top-left / top-right so ears stay on the "head"
-    // even when the jelly is heavily squished (avoids side spike artifacts).
-    function bestOuterNear(angleTarget) {
-      let best = 1;
-      let bestDiff = Infinity;
-      for (let i = 1; i <= OUTER_N; i++) {
-        const p = points[i];
-        let ang = Math.atan2(p.y - c.y, p.x - c.x);
-        let d = ang - angleTarget;
-        while (d > Math.PI) d -= Math.PI * 2;
-        while (d < -Math.PI) d += Math.PI * 2;
-        d = Math.abs(d);
-        if (d < bestDiff) { bestDiff = d; best = i; }
-      }
-      return best;
+  /** Surface point on the soft hull in a *world* angle from the center of mass. */
+  function hullPointAtWorldAngle(c, worldAng) {
+    let best = points[1];
+    let bestDiff = Infinity;
+    for (let i = 1; i <= OUTER_N; i++) {
+      const p = points[i];
+      let ang = Math.atan2(p.y - c.y, p.x - c.x);
+      let d = ang - worldAng;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      d = Math.abs(d);
+      if (d < bestDiff) { bestDiff = d; best = p; }
     }
-    const leftIdx = bestOuterNear(-Math.PI * 0.72);
-    const rightIdx = bestOuterNear(-Math.PI * 0.28);
-    const tipLen = avgSpokeRest() * 0.48;
+    const rr = Math.hypot(best.x - c.x, best.y - c.y) || avgSpokeRest();
+    // Blend toward ideal world-up circle so ears never follow a sideways spike
+    const idealX = c.x + Math.cos(worldAng) * rr;
+    const idealY = c.y + Math.sin(worldAng) * rr;
+    return {
+      x: lerp(best.x, idealX, 0.72),
+      y: lerp(best.y, idealY, 0.72),
+      r: rr,
+    };
+  }
 
-    function ear(idx, tipAngBias) {
-      const p = points[idx];
-      const prev = points[idx === 1 ? OUTER_N : idx - 1];
-      const next = points[idx === OUTER_N ? 1 : idx + 1];
-      const baseL = { x: lerp(p.x, prev.x, 0.35), y: lerp(p.y, prev.y, 0.35) };
-      const baseR = { x: lerp(p.x, next.x, 0.35), y: lerp(p.y, next.y, 0.35) };
-      let nx = p.x - c.x;
-      let ny = p.y - c.y;
-      const nl = Math.hypot(nx, ny) || 1;
-      nx /= nl; ny /= nl;
-      // Bias tip slightly outward/up so ears read as ears, not spines
-      const tipX = p.x + nx * tipLen + Math.cos(tipAngBias) * tipLen * 0.12;
-      const tipY = p.y + ny * tipLen + Math.sin(tipAngBias) * tipLen * 0.12 - tipLen * 0.08;
+  function drawEars(c) {
+    // CRITICAL: ears are anchored to COM + world-up (−π/2), never fixed particle indices.
+    const up = -Math.PI / 2;
+    const tipLen = avgSpokeRest() * 0.42;
+    const baseSpread = avgSpokeRest() * 0.22;
+
+    function roundedEar(side) {
+      // side: -1 left, +1 right — placed on the top of the head in screen space
+      const ang = up + side * 0.42;
+      const base = hullPointAtWorldAngle(c, ang);
+      const ux = 0; // world up
+      const uy = -1;
+      const tx = side; // outward tangent-ish
+      const ty = 0;
+      const bx = base.x;
+      const by = base.y;
+      const baseL = { x: bx - tx * baseSpread * 0.55 + ux * 2, y: by - ty * baseSpread * 0.55 + uy * 2 };
+      const baseR = { x: bx + tx * baseSpread * 0.55 + ux * 2, y: by + ty * baseSpread * 0.55 + uy * 2 };
+      // Tip always continues upward (plus a little outward) — never rotates onto the cheek
+      const tipX = bx + ux * tipLen + side * tipLen * 0.18;
+      const tipY = by + uy * tipLen - tipLen * 0.06;
+      const ctrlLX = lerp(baseL.x, tipX, 0.45) - side * tipLen * 0.08;
+      const ctrlLY = lerp(baseL.y, tipY, 0.35);
+      const ctrlRX = lerp(baseR.x, tipX, 0.45) + side * tipLen * 0.08;
+      const ctrlRY = lerp(baseR.y, tipY, 0.35);
 
       ctx.beginPath();
       ctx.moveTo(baseL.x, baseL.y);
-      ctx.quadraticCurveTo(lerp(baseL.x, tipX, 0.55), lerp(baseL.y, tipY, 0.45), tipX, tipY);
-      ctx.quadraticCurveTo(lerp(baseR.x, tipX, 0.55), lerp(baseR.y, tipY, 0.45), baseR.x, baseR.y);
+      ctx.quadraticCurveTo(ctrlLX, ctrlLY, tipX, tipY);
+      ctx.quadraticCurveTo(ctrlRX, ctrlRY, baseR.x, baseR.y);
       ctx.closePath();
-      const eg = ctx.createLinearGradient(p.x, p.y, tipX, tipY);
+      const eg = ctx.createLinearGradient(bx, by, tipX, tipY);
       eg.addColorStop(0, COLORS.cat);
       eg.addColorStop(1, COLORS.catDeep);
       ctx.fillStyle = eg;
       ctx.fill();
 
+      // soft inner ear oval
+      const ix = lerp(bx, tipX, 0.42);
+      const iy = lerp(by, tipY, 0.42);
       ctx.beginPath();
-      ctx.moveTo(lerp(baseL.x, tipX, 0.32), lerp(baseL.y, tipY, 0.32));
-      ctx.quadraticCurveTo(tipX, tipY, lerp(baseR.x, tipX, 0.32), lerp(baseR.y, tipY, 0.32));
-      ctx.quadraticCurveTo(p.x, p.y, lerp(baseL.x, tipX, 0.32), lerp(baseL.y, tipY, 0.32));
-      ctx.fillStyle = 'rgba(255, 120, 150, 0.45)';
+      ctx.ellipse(ix, iy, tipLen * 0.16, tipLen * 0.22, side * 0.15, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.innerEar;
       ctx.fill();
     }
-    ear(leftIdx, -2.2);
-    ear(rightIdx, -0.9);
+    roundedEar(-1);
+    roundedEar(1);
+  }
+
+  function drawPaws(c) {
+    const r = avgSpokeRest();
+    const stressed = stretchRatio() > 1.35 || fillRatio() > 0.55;
+    // Cling to vase rim when the body is near / entering the mouth
+    let cling = false;
+    let rimY = c.y + r * 0.55;
+    let rimHalf = r * 0.55;
+    if (container && phase === 'play') {
+      const ox = containerSlide;
+      const nearMouth = c.y > container.mouthY - r * 1.1;
+      const inLane = Math.abs(c.x - (container.cx + ox)) < container.mouthW * 0.7;
+      if (nearMouth && inLane) {
+        cling = true;
+        rimY = container.mouthY - 2;
+        rimHalf = container.mouthW * 0.38;
+      }
+    }
+    const pawY = cling ? rimY : c.y + r * (stressed ? 0.42 : 0.48);
+    const pawSpread = cling ? rimHalf : r * 0.48;
+    const pawR = r * (cling ? 0.16 : 0.14);
+
+    function paw(side) {
+      const px = c.x + side * pawSpread;
+      const py = pawY + (cling ? -pawR * 0.15 : 0);
+      // fluffy outer
+      ctx.beginPath();
+      ctx.ellipse(px, py, pawR * 1.15, pawR * 0.95, 0, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.cat;
+      ctx.fill();
+      // soft pad
+      ctx.beginPath();
+      ctx.ellipse(px, py + pawR * 0.08, pawR * 0.55, pawR * 0.42, 0, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.pawPad;
+      ctx.fill();
+      // toe beans
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.arc(px + i * pawR * 0.38, py - pawR * 0.28, pawR * 0.16, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fill();
+      }
+    }
+    paw(-1);
+    paw(1);
   }
 
   function drawFace(c) {
-    const lookTarget = dragging ? pointer : { x: c.x + Math.sin(timeSec * 0.7) * 8, y: c.y - 12 };
+    const lookTarget = dragging ? pointer : { x: c.x + Math.sin(timeSec * 0.7) * 10, y: c.y - 14 };
     let lx = lookTarget.x - c.x;
     let ly = lookTarget.y - c.y;
     const llen = Math.hypot(lx, ly) || 1;
     lx /= llen; ly /= llen;
-    const lookAmt = 4.8;
+    const lookAmt = 5.2;
+    const scale = avgSpokeRest() / 60;
 
-    const stressed = stretchRatio() > 1.42 || fillRatio() > 0.72;
+    const stressed = stretchRatio() > 1.38 || fillRatio() > 0.68 || dragging;
     const happy = celebrating || fillRatio() > 0.85;
-    const squintBase = stressed ? 0.72 : 0;
-    const lid = clamp(Math.max(squintBase, blinkAmount), 0, 1);
+    const squinting = stressed || blinkAmount > 0.55;
 
-    const eyeY = c.y - 6.5;
-    const eyeSpread = 11.5;
-    const eyeR = lerp(3.7, 2.1, lid);
-    const eyeH = lerp(3.7, 0.55, lid);
-    const pupilR = lerp(1.75, 0.9, lid);
+    const eyeY = c.y - 7 * scale;
+    const eyeSpread = 13 * scale;
 
-    // cheeks
+    // blush — soft ellipses outside / below the eyes
     ctx.beginPath();
-    ctx.ellipse(c.x - 16, c.y + 5, 6.5, 4.2, 0, 0, Math.PI * 2);
-    ctx.ellipse(c.x + 16, c.y + 5, 6.5, 4.2, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x - eyeSpread - 6 * scale, c.y + 4 * scale, 7.5 * scale, 4.8 * scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(c.x + eyeSpread + 6 * scale, c.y + 4 * scale, 7.5 * scale, 4.8 * scale, 0, 0, Math.PI * 2);
     ctx.fillStyle = COLORS.cheek;
     ctx.fill();
 
-    function eye(ex) {
-      const ox = ex + lx * lookAmt * (1 - lid * 0.4);
-      const oy = eyeY + ly * lookAmt * 0.32;
-      ctx.beginPath();
-      ctx.ellipse(ox, oy, eyeR * (stressed ? 1.35 : 1), eyeH, 0, 0, Math.PI * 2);
-      ctx.fillStyle = '#fff';
-      ctx.fill();
-      if (lid < 0.85) {
+    function kawaiiEye(ex) {
+      const ox = ex + lx * lookAmt * (squinting ? 0.25 : 1);
+      const oy = eyeY + ly * lookAmt * 0.28;
+      if (squinting) {
+        // ⌒ ⌒ closed / squeezed arcs
         ctx.beginPath();
-        ctx.arc(ox + lx * 1.25, oy + ly * 1.1, pupilR, 0, Math.PI * 2);
-        ctx.fillStyle = COLORS.ink;
-        ctx.fill();
-        // glossy highlight
-        ctx.beginPath();
-        ctx.arc(ox + lx * 1.25 - 0.8, oy + ly * 1.1 - 0.9, pupilR * 0.35, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        ctx.fill();
-      }
-      // soft lid crease when blinking/squinting
-      if (lid > 0.15) {
-        ctx.beginPath();
-        ctx.strokeStyle = 'rgba(255, 82, 119, 0.35)';
-        ctx.lineWidth = 1.4;
+        ctx.strokeStyle = COLORS.ink;
+        ctx.lineWidth = 2.4 * scale;
         ctx.lineCap = 'round';
-        ctx.moveTo(ox - eyeR * 1.1, oy);
-        ctx.quadraticCurveTo(ox, oy - eyeH * 0.2, ox + eyeR * 1.1, oy);
+        ctx.moveTo(ox - 6.5 * scale, oy + 1.5 * scale);
+        ctx.quadraticCurveTo(ox, oy - 5.5 * scale, ox + 6.5 * scale, oy + 1.5 * scale);
         ctx.stroke();
+        return;
       }
+      // big glossy eyes
+      const er = 5.4 * scale;
+      ctx.beginPath();
+      ctx.arc(ox, oy, er, 0, Math.PI * 2);
+      ctx.fillStyle = COLORS.ink;
+      ctx.fill();
+      // twin specular highlights
+      ctx.beginPath();
+      ctx.arc(ox - er * 0.28, oy - er * 0.32, er * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(ox + er * 0.22, oy + er * 0.18, er * 0.14, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      ctx.fill();
     }
-    eye(c.x - eyeSpread);
-    eye(c.x + eyeSpread);
+    kawaiiEye(c.x - eyeSpread);
+    kawaiiEye(c.x + eyeSpread);
 
-    // nose
+    // tiny nose
     ctx.beginPath();
-    ctx.moveTo(c.x, c.y + 1.5);
-    ctx.lineTo(c.x - 3.8, c.y + 7.2);
-    ctx.lineTo(c.x + 3.8, c.y + 7.2);
+    ctx.moveTo(c.x, c.y + 1.2 * scale);
+    ctx.lineTo(c.x - 3.2 * scale, c.y + 5.8 * scale);
+    ctx.lineTo(c.x + 3.2 * scale, c.y + 5.8 * scale);
     ctx.closePath();
     ctx.fillStyle = COLORS.face;
     ctx.fill();
 
-    // mouth
+    // classic cat ω mouth
     ctx.beginPath();
     ctx.strokeStyle = COLORS.face;
-    ctx.lineWidth = 1.7;
+    ctx.lineWidth = 1.9 * scale;
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    const my = c.y + 9.5 * scale;
     if (happy) {
-      ctx.arc(c.x, c.y + 11, 6.2, 0.12 * Math.PI, 0.88 * Math.PI);
-    } else if (stressed) {
-      ctx.moveTo(c.x - 4.5, c.y + 13.5);
-      ctx.quadraticCurveTo(c.x, c.y + 11.2, c.x + 4.5, c.y + 13.5);
+      ctx.arc(c.x, my, 6.5 * scale, 0.12 * Math.PI, 0.88 * Math.PI);
     } else {
-      ctx.moveTo(c.x - 5.2, c.y + 11.2);
-      ctx.quadraticCurveTo(c.x, c.y + 15.5, c.x + 5.2, c.y + 11.2);
+      // ω : two small U dips
+      ctx.moveTo(c.x - 7 * scale, my);
+      ctx.quadraticCurveTo(c.x - 3.5 * scale, my + 5.5 * scale, c.x, my + 1.2 * scale);
+      ctx.quadraticCurveTo(c.x + 3.5 * scale, my + 5.5 * scale, c.x + 7 * scale, my);
     }
     ctx.stroke();
-
-    // tiny whiskers
-    ctx.strokeStyle = 'rgba(255, 82, 119, 0.28)';
-    ctx.lineWidth = 1.1;
-    [[-1, -0.2], [-1, 0.25], [1, -0.2], [1, 0.25]].forEach(([side, yo], i) => {
-      ctx.beginPath();
-      const wx = c.x + side * 8;
-      const wy = c.y + 8 + yo * 8;
-      ctx.moveTo(wx, wy);
-      ctx.quadraticCurveTo(wx + side * 10, wy + (i % 2 ? 2 : -2), wx + side * 18, wy + yo * 4);
-      ctx.stroke();
-    });
   }
 
   function drawContainer() {
@@ -1074,28 +1144,34 @@
     const locked = phase === 'play' && fillRatio() >= 0.85;
     const fill = phase === 'play' ? fillRatio() : 0;
     const poly = container.path;
+    const rimRx = container.mouthW * 0.5;
+    const rimRy = Math.max(7, Math.min(W, H) * 0.012);
 
     ctx.save();
     ctx.translate(ox, 0);
 
-    // soft contact shadow under glass
+    // soft table shadow under the vase
     ctx.beginPath();
-    ctx.ellipse(container.cx, H * 0.925, container.mouthW * 0.42, 10, 0, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(70, 55, 100, 0.08)';
+    ctx.ellipse(container.cx, H * 0.915, rimRx * 0.95, 14, 0, 0, Math.PI * 2);
+    const sh = ctx.createRadialGradient(container.cx, H * 0.915, 4, container.cx, H * 0.915, rimRx);
+    sh.addColorStop(0, 'rgba(70, 55, 100, 0.16)');
+    sh.addColorStop(1, 'rgba(70, 55, 100, 0)');
+    ctx.fillStyle = sh;
     ctx.fill();
 
-    // glass body fill
+    // frosted glass body fill
     ctx.beginPath();
     ctx.moveTo(poly[0].x, poly[0].y);
     for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
     ctx.closePath();
     const gf = ctx.createLinearGradient(container.cx, container.mouthY, container.cx, H * 0.9);
     gf.addColorStop(0, COLORS.glassFillTop);
+    gf.addColorStop(0.45, COLORS.glassFrost);
     gf.addColorStop(1, COLORS.glassFillBot);
     ctx.fillStyle = gf;
     ctx.fill();
 
-    // fill progress wash
+    // fill progress wash (cat juice rising)
     if (fill > 0.05) {
       ctx.save();
       ctx.beginPath();
@@ -1103,29 +1179,17 @@
       for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
       ctx.closePath();
       ctx.clip();
-      const top = lerp(H * 0.88, container.neckY - 10, clamp(fill, 0, 1));
+      const top = lerp(H * 0.86, container.neckY - 8, clamp(fill, 0, 1));
       const pg = ctx.createLinearGradient(0, top, 0, H * 0.9);
       pg.addColorStop(0, 'rgba(255, 158, 158, 0.0)');
-      pg.addColorStop(0.35, `rgba(255, 158, 158, ${0.08 + fill * 0.12})`);
-      pg.addColorStop(1, `rgba(255, 120, 150, ${0.10 + fill * 0.16})`);
+      pg.addColorStop(0.4, `rgba(255, 158, 158, ${0.10 + fill * 0.14})`);
+      pg.addColorStop(1, `rgba(255, 120, 150, ${0.12 + fill * 0.18})`);
       ctx.fillStyle = pg;
       ctx.fillRect(container.cx - container.mouthW, top, container.mouthW * 2, H);
       ctx.restore();
     }
 
-    // thick frosted wall (under) + crisp stroke (over)
-    ctx.beginPath();
-    for (let s = 0; s < container.segments.length; s++) {
-      const seg = container.segments[s];
-      ctx.moveTo(seg.ax, seg.ay);
-      ctx.lineTo(seg.bx, seg.by);
-    }
-    ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = 9;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.stroke();
-
+    // wall stroke — mint frosted, round joins, ~4px
     ctx.beginPath();
     for (let s = 0; s < container.segments.length; s++) {
       const seg = container.segments[s];
@@ -1133,43 +1197,49 @@
       ctx.lineTo(seg.bx, seg.by);
     }
     ctx.strokeStyle = locked ? COLORS.lock : COLORS.glass;
-    ctx.lineWidth = 4.2;
+    ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     if (locked) {
       ctx.shadowColor = COLORS.lock;
-      ctx.shadowBlur = 16;
+      ctx.shadowBlur = 14;
     } else if (fill > 0.4) {
-      ctx.shadowColor = 'rgba(112, 214, 188, 0.45)';
-      ctx.shadowBlur = 8 + fill * 10;
+      ctx.shadowColor = 'rgba(112, 214, 188, 0.4)';
+      ctx.shadowBlur = 8 + fill * 8;
     }
     ctx.stroke();
     ctx.shadowBlur = 0;
 
-    // rim highlight
+    // rim flange — full ellipse ring with thickness (not open wire ends)
     ctx.beginPath();
-    ctx.moveTo(container.cx - container.mouthW * 0.5, container.mouthY);
-    ctx.lineTo(container.cx + container.mouthW * 0.5, container.mouthY);
+    ctx.ellipse(container.cx, container.mouthY, rimRx, rimRy, 0, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.42)';
+    ctx.fill();
+    ctx.strokeStyle = locked ? COLORS.lock : COLORS.glass;
+    ctx.lineWidth = 3.5;
+    ctx.stroke();
+    // inner rim highlight
+    ctx.beginPath();
+    ctx.ellipse(container.cx, container.mouthY + 1, rimRx * 0.78, rimRy * 0.55, 0, 0, Math.PI * 2);
     ctx.strokeStyle = COLORS.glassRim;
-    ctx.lineWidth = 3.2;
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // left specular streak
+    ctx.beginPath();
+    const leftSeg = container.segments[0];
+    ctx.moveTo(leftSeg.ax + 4, leftSeg.ay + 10);
+    ctx.lineTo(leftSeg.bx + 4, leftSeg.by - 10);
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
+    ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
     ctx.stroke();
 
-    // inner specular edge (left)
-    ctx.beginPath();
-    const leftSeg = container.segments[0];
-    ctx.moveTo(leftSeg.ax + 3.5, leftSeg.ay + 8);
-    ctx.lineTo(leftSeg.bx + 3.5, leftSeg.by - 8);
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // goblet stem polish line
     if (container.id === 'goblet') {
       ctx.beginPath();
-      ctx.moveTo(container.cx, container.neckY + 8);
-      ctx.lineTo(container.cx, H * 0.86);
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.moveTo(container.cx, container.neckY + 6);
+      ctx.lineTo(container.cx, H * 0.83);
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
       ctx.lineWidth = 2;
       ctx.stroke();
     }
@@ -1229,17 +1299,8 @@
     ctx.stroke();
 
     drawFace(c);
+    drawPaws(c);
     drawParticles();
-
-    // subtle brand mark — keeps first viewport brand-first without clutter
-    ctx.save();
-    ctx.globalAlpha = 0.28;
-    ctx.fillStyle = '#5a4570';
-    ctx.font = '700 13px "Trebuchet MS", "Segoe UI", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Liquid Cat', W * 0.5, H * 0.965);
-    ctx.restore();
-
     ctx.restore();
   }
 
@@ -1282,6 +1343,18 @@
     }
 
     updateParticles(dt);
+    // lightweight fill HUD
+    if (fillHud && phase === 'play') {
+      const pct = Math.round(fillRatio() * 100);
+      fillHud.textContent = pct + '% Full';
+      fillHud.style.color = pct >= 85
+        ? 'rgba(56, 239, 125, 0.85)'
+        : 'rgba(90, 69, 112, 0.45)';
+    } else if (fillHud && (phase === 'celebrate' || phase === 'exit')) {
+      fillHud.textContent = 'POP!';
+    } else if (fillHud) {
+      fillHud.textContent = '0% Full';
+    }
     draw();
     requestAnimationFrame(frame);
   }
@@ -1289,7 +1362,7 @@
   function init() {
     resize();
     setContainer(0);
-    buildCat(W * 0.5, H * 0.30, RADIUS());
+    buildCat(W * 0.5, H * 0.24, RADIUS());
     lastTime = 0;
     phase = 'play';
     containerSlide = 0;
@@ -1300,7 +1373,7 @@
     resize();
     if (phase === 'play' || phase === 'celebrate') {
       setContainer(containerIndex);
-      buildCat(W * 0.5, H * 0.30, RADIUS());
+      buildCat(W * 0.5, H * 0.24, RADIUS());
     }
   });
 
